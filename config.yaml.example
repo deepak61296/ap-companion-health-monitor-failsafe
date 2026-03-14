@@ -1,0 +1,51 @@
+# Companion Computer Health Monitor Configuration
+# Copy to config.yaml and modify as needed
+
+# Connection settings
+connection:
+  # MAVLink connection string
+  # UDP examples:
+  #   udpout:127.0.0.1:14550    - Send to localhost (SITL default)
+  #   udpout:127.0.0.1:14560    - Send to MAVProxy input port
+  #   udpout:192.168.1.10:14550 - Send to remote GCS
+  # Serial examples:
+  #   /dev/ttyACM0              - USB serial (Cube Orange, etc.)
+  #   /dev/ttyS0                - UART (Raspberry Pi GPIO)
+  #   /dev/ttyTHS1              - Jetson UART
+  device: "udpout:127.0.0.1:14560"
+
+  # Baud rate for serial connections (ignored for UDP)
+  baud: 115200
+
+  # MAVLink system and component IDs
+  source_system: 1
+  source_component: 191  # MAV_COMP_ID_ONBOARD_COMPUTER
+
+# Monitoring settings
+monitoring:
+  # Message send rate in Hz (1.0 = once per second)
+  rate_hz: 1.0
+
+  # Filesystem path to monitor for disk usage
+  disk_path: "/"
+
+# Thresholds for status flags
+thresholds:
+  # Temperature in Celsius at which to set FLAG_THROTTLED
+  temp_throttle: 80.0
+
+  # Temperature in Celsius at which to set FLAG_OVERHEATING
+  temp_overheat: 85.0
+
+  # Memory usage percentage at which to set FLAG_LOW_MEMORY
+  memory_low: 90
+
+  # Disk usage percentage at which to set FLAG_LOW_DISK
+  disk_low: 95
+
+# Platform backend selection
+# Leave commented for auto-detection, or set to one of:
+#   - "generic"       : Generic Linux (psutil + nvidia-smi)
+#   - "raspberry_pi"  : Raspberry Pi optimized (vcgencmd)
+#   - "jetson"        : NVIDIA Jetson (tegrastats)
+# platform: "generic"

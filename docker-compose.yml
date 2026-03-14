@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  companion-health:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: companion-health:latest
+    container_name: companion-health
+    restart: unless-stopped
+
+    # Network mode: host for direct UDP/serial access
+    network_mode: host
+
+    # Privileged mode for /sys access (temperature sensors)
+    privileged: true
+
+    # Mount points
+    volumes:
+      # Configuration file
+      - ./config.yaml:/app/config.yaml:ro
+      # System info (read-only)
+      - /sys:/sys:ro
+      # Device access for serial connections
+      - /dev:/dev
+
+    # Environment
+    environment:
+      - MAVLINK20=1
+      - PYTHONUNBUFFERED=1
+
+    # Default command (can be overridden)
+    command: ["--config", "/app/config.yaml", "--verbose"]
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import companion_health; print('ok')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Example configurations for different platforms:
+#
+# Jetson Nano (serial to Cube):
+#   Edit config.yaml:
+#     connection:
+#       device: "/dev/ttyTHS1"
+#       baud: 921600
+#
+# Raspberry Pi (serial to Cube):
+#   Edit config.yaml:
+#     connection:
+#       device: "/dev/ttyAMA0"
+#       baud: 921600
+#
+# Development (UDP to SITL):
+#   Edit config.yaml:
+#     connection:
+#       device: "udpout:127.0.0.1:14560"
