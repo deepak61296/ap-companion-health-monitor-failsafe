@@ -393,13 +393,57 @@ companion_script/
 
 ---
 
-## Future Work
+## Implementation Status
 
-- [ ] FC-side `AP_CompanionHealth` library
-- [ ] Failsafe actions when companion degrades
-- [ ] Service monitoring (systemd services)
-- [ ] Automatic reconnection with backoff
-- [ ] Web dashboard for monitoring
+This is part of **GSoC 2026: Real-Time Companion Computer Health Monitoring & Failsafe**.
+
+### Completed Features
+
+| Component | Status |
+|-----------|--------|
+| **MAVLink Message (COMPANION_HEALTH)** | Done + Tested |
+| **FC Library (AP_CompanionHealth)** | Done + Tested |
+| **ArduCopter Failsafe Integration** | Done + Tested |
+| **Python Package (companion_health)** | Done + Tested |
+| **Jetson Backend** | Done + Tested |
+| **Raspberry Pi Backend** | Done + Tested |
+| **Generic Linux Backend** | Done + Tested |
+| **Deployment (systemd, Docker)** | Done |
+
+### Hardware Testing
+
+| Flight Controller | Companion | Status |
+|-------------------|-----------|--------|
+| CubeOrange | Jetson Nano | Tested |
+| CubeOrange | Raspberry Pi | Tested |
+| SITL | Linux PC | Tested |
+
+#### Raspberry Pi 4 + CubeOrange
+![Health Monitor on RPi](screenshots/test_health_rpi.png)
+
+#### Jetson Nano + CubeOrange
+![Health Monitor on Jetson](screenshots/test_health_jetson.png)
+
+### Remaining Work
+
+| Feature | Status |
+|---------|--------|
+| Services Monitoring (`services_status` bitmask) | Not Started |
+| Hardware Watchdog (`/dev/watchdog`) | Not Started |
+| DataFlash Logging | Not Started |
+| ArduPlane/Rover/Sub Support | Not Started |
+| Automated Unit Tests | Not Started |
+| MAVLink Upstream Submission | Not Started |
+
+See [PROGRESS.md](https://github.com/deepak61296/ardupilot/blob/companion-computer-health-monitor/companion_script/PROGRESS.md) for detailed tracking.
+
+---
+
+## Related Repositories
+
+- **ArduPilot Fork**: [companion-computer-health-monitor branch](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor)
+- **FC Library**: `libraries/AP_CompanionHealth/`
+- **MAVLink Definition**: `modules/mavlink/message_definitions/v1.0/ardupilotmega.xml`
 
 ---
 
