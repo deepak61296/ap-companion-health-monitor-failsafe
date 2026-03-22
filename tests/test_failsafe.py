@@ -29,14 +29,14 @@ def test_failsafe():
         mav.wait_heartbeat(timeout=10)
         print(f"Connected to system {mav.target_system}")
 
-        # Set CC_ENABLE = 1 (RTL)
-        print("Setting CC_ENABLE = 1 (RTL on failsafe)...")
-        mav.mav.param_set_send(mav.target_system, mav.target_component, b'CC_ENABLE', 1.0, mavutil.mavlink.MAV_PARAM_TYPE_INT8)
+        # Set CCH_ENABLE = 1 (RTL)
+        print("Setting CCH_ENABLE = 1 (RTL on failsafe)...")
+        mav.mav.param_set_send(mav.target_system, mav.target_component, b'CCH_ENABLE', 1.0, mavutil.mavlink.MAV_PARAM_TYPE_INT8)
         time.sleep(0.5)
 
-        # Set CC_TIMEOUT = 3 seconds
-        print("Setting CC_TIMEOUT = 3...")
-        mav.mav.param_set_send(mav.target_system, mav.target_component, b'CC_TIMEOUT', 3.0, mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
+        # Set CCH_TIMEOUT = 3 seconds
+        print("Setting CCH_TIMEOUT = 3...")
+        mav.mav.param_set_send(mav.target_system, mav.target_component, b'CCH_TIMEOUT', 3.0, mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
         time.sleep(0.5)
 
         # Send COMPANION_HEALTH to establish connection

@@ -34,12 +34,12 @@ def test_sitl():
         mav.wait_heartbeat(timeout=10)
         print(f"Got heartbeat from system {mav.target_system}")
 
-        # Set CC_ENABLE = 1
-        print("Setting CC_ENABLE = 1...")
+        # Set CCH_ENABLE = 1
+        print("Setting CCH_ENABLE = 1...")
         mav.mav.param_set_send(
             mav.target_system,
             mav.target_component,
-            b'CC_ENABLE',
+            b'CCH_ENABLE',
             1.0,
             mavutil.mavlink.MAV_PARAM_TYPE_INT8
         )
@@ -75,7 +75,7 @@ def test_sitl():
                     break
 
         if not found:
-            print("WARNING: No 'Companion' STATUSTEXT received (might need CC_ENABLE set)")
+            print("WARNING: No 'Companion' STATUSTEXT received (might need CCH_ENABLE set)")
 
         return found
 

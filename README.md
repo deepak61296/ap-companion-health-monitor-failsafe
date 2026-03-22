@@ -72,8 +72,8 @@ thresholds:
 Requires custom ArduPilot firmware with AP_CompanionHealth library.
 
 Parameters:
-- `CC_ENABLE`: Set to 1 to enable companion health monitoring
-- `CC_TIMEOUT`: Seconds before failsafe triggers (default 5)
+- `CCH_ENABLE`: Set to 1 to enable companion health monitoring
+- `CCH_TIMEOUT`: Seconds before failsafe triggers (default 5)
 
 ## COMPANION_HEALTH Message
 

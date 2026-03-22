@@ -54,7 +54,7 @@ def main():
         print("\n[PHASE 2] Stopping health messages (simulating crash)")
         print("-" * 40)
         print("Health messages STOPPED.")
-        print("Waiting for failsafe... (CC_TIMEOUT = 5 seconds)")
+        print("Waiting for failsafe... (CCH_TIMEOUT = 5 seconds)")
         print("")
 
         for i in range(8):
