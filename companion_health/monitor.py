@@ -2,6 +2,7 @@
 
 import logging
 import os
+import struct
 import time
 from typing import Optional
 
@@ -12,8 +13,13 @@ from pymavlink import mavutil
 
 from .backends import MetricsBackend, detect_backend
 from .config import Config
+from .state import CompanionState, StateMachine
 
 log = logging.getLogger(__name__)
+
+# COMPANION_HEALTH message ID and CRC
+MAVLINK_MSG_ID_COMPANION_HEALTH = 11061
+COMPANION_HEALTH_CRC_EXTRA = 81
 
 # MAVLink component type for onboard computer
 MAV_TYPE_ONBOARD_CONTROLLER = 18
@@ -36,6 +42,8 @@ class HealthMonitor:
         self.mav = None
         self.watchdog_seq = 0
         self.running = False
+        self.state_machine = StateMachine()
+        self._last_metrics = None
 
         # Set up backend with threshold config
         if backend is None:
@@ -68,6 +76,11 @@ class HealthMonitor:
         backend.config = backend_config
         return backend
 
+    @property
+    def state(self) -> CompanionState:
+        """Current connection/health state."""
+        return self.state_machine.state
+
     def connect(self) -> bool:
         """Establish MAVLink connection.
 
@@ -85,33 +98,63 @@ class HealthMonitor:
                 source_component=self.config.connection.source_component,
                 dialect='ardupilotmega'
             )
-            log.info("Connected successfully")
+            self.state_machine.on_connect_success()
+            log.info("Connected successfully (state: %s)", self.state.name)
             return True
         except Exception as e:
             log.error("Failed to connect: %s", e)
             return False
 
     def send_heartbeat(self) -> bool:
-        """Send HEARTBEAT message to establish MAVLink connection.
-
-        Returns:
-            True if message sent successfully, False otherwise
-        """
+        """Send HEARTBEAT message to establish MAVLink connection."""
         if not self.mav:
             return False
-
         try:
             self.mav.mav.heartbeat_send(
                 MAV_TYPE_ONBOARD_CONTROLLER,
                 MAV_AUTOPILOT_INVALID,
                 MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                0,  # custom_mode
+                0,
                 MAV_STATE_ACTIVE
             )
             return True
         except Exception as e:
             log.error("Failed to send heartbeat: %s", e)
             return False
+
+    def _send_companion_health_raw(self, services_status, watchdog_seq,
+                                    temperature, cpu_load, memory_used,
+                                    disk_used, gpu_load, status_flags):
+        """Send COMPANION_HEALTH as raw MAVLink2 packet (for old pymavlink)."""
+        # Pack payload: uint32 + uint16 + int16 + 5x uint8 = 14 bytes
+        payload = struct.pack('<IHhBBBBB',
+            services_status, watchdog_seq, temperature,
+            cpu_load, memory_used, disk_used, gpu_load, status_flags
+        )
+
+        seq = self.mav.mav.seq
+        self.mav.mav.seq = (seq + 1) % 256
+
+        # MAVLink2 header
+        header = struct.pack('<BBBBBBBHB',
+            0xFD,  # MAVLink2 magic
+            len(payload),
+            0,  # incompat_flags
+            0,  # compat_flags
+            seq,
+            self.mav.mav.srcSystem,
+            self.mav.mav.srcComponent,
+            MAVLINK_MSG_ID_COMPANION_HEALTH & 0xFFFF,
+            (MAVLINK_MSG_ID_COMPANION_HEALTH >> 16) & 0xFF
+        )
+
+        # Calculate CRC
+        crc = mavutil.x25crc(header[1:])
+        crc.accumulate(payload)
+        crc.accumulate_str(chr(COMPANION_HEALTH_CRC_EXTRA))
+
+        # Send packet
+        self.mav.write(header + payload + struct.pack('<H', crc.crc))
 
     def send_health(self) -> bool:
         """Collect metrics and send COMPANION_HEALTH message.
@@ -124,22 +167,45 @@ class HealthMonitor:
 
         # Collect all metrics
         metrics = self.backend.collect_all(self.config.monitoring.disk_path)
+        self._last_metrics = metrics
+
+        # Update state machine based on health
+        self.state_machine.update_health(
+            metrics.status_flags,
+            metrics.cpu_load,
+            metrics.memory_used,
+            metrics.temperature
+        )
 
         try:
-            self.mav.mav.companion_health_send(
-                services_status=0,  # Not implemented yet
-                watchdog_seq=self.watchdog_seq,
-                temperature=metrics.temperature,
-                cpu_load=metrics.cpu_load,
-                memory_used=metrics.memory_used,
-                disk_used=metrics.disk_used,
-                gpu_load=metrics.gpu_load,
-                status_flags=metrics.status_flags
-            )
+            # Try native method first, fall back to raw packet
+            if hasattr(self.mav.mav, 'companion_health_send'):
+                self.mav.mav.companion_health_send(
+                    services_status=0,
+                    watchdog_seq=self.watchdog_seq,
+                    temperature=metrics.temperature,
+                    cpu_load=metrics.cpu_load,
+                    memory_used=metrics.memory_used,
+                    disk_used=metrics.disk_used,
+                    gpu_load=metrics.gpu_load,
+                    status_flags=metrics.status_flags
+                )
+            else:
+                self._send_companion_health_raw(
+                    services_status=0,
+                    watchdog_seq=self.watchdog_seq,
+                    temperature=metrics.temperature,
+                    cpu_load=metrics.cpu_load,
+                    memory_used=metrics.memory_used,
+                    disk_used=metrics.disk_used,
+                    gpu_load=metrics.gpu_load,
+                    status_flags=metrics.status_flags
+                )
             self.watchdog_seq = (self.watchdog_seq + 1) % 65536
 
             log.debug(
-                "Sent: cpu=%d%% mem=%d%% disk=%d%% temp=%.1fC gpu=%s flags=0x%02x seq=%d",
+                "Sent [%s]: cpu=%d%% mem=%d%% disk=%d%% temp=%.1fC gpu=%s flags=0x%02x seq=%d",
+                self.state.name,
                 metrics.cpu_load,
                 metrics.memory_used,
                 metrics.disk_used,
@@ -151,6 +217,7 @@ class HealthMonitor:
             return True
         except Exception as e:
             log.error("Failed to send message: %s", e)
+            self.state_machine.on_disconnect()
             return False
 
     def run(self) -> int:

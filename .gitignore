@@ -26,3 +26,8 @@ config.yaml
 # OS
 .DS_Store
 Thumbs.db
+
+# SITL artifacts
+eeprom.bin
+terrain/
+*.bin

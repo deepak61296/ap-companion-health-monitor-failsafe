@@ -5,6 +5,9 @@ psutil>=5.9.0
 pyserial>=3.5
 PyYAML>=6.0
 
+# Development/Testing
+pytest>=7.0.0
+
 # For building pymavlink (install separately from ArduPilot repo)
 # pip install lxml
 # MDEF=~/ardupilot/modules/mavlink/message_definitions pip install ~/ardupilot/modules/mavlink/pymavlink
