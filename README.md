@@ -1,5 +1,11 @@
 # Companion Computer Health Monitor
 
+[![Demo Video](https://img.youtube.com/vi/s6RZwZTwf14/maxresdefault.jpg)](https://www.youtube.com/watch?v=s6RZwZTwf14)
+
+**[Watch Demo Video](https://www.youtube.com/watch?v=s6RZwZTwf14)** - Shows failsafe triggering when companion health monitor stops sending messages.
+
+---
+
 Sends health telemetry from a companion computer (Jetson, RPi, etc.) to ArduPilot via a custom `COMPANION_HEALTH` MAVLink message. The flight controller can trigger failsafe actions if the companion stops responding.
 
 ## Requirements
