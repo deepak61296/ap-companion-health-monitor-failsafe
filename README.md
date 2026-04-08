@@ -178,7 +178,7 @@ DISCONNECTED ──── First message ────► HEALTHY
      └─────────────────────────────  CRITICAL ──► FAILSAFE
 ```
 
----
+## Current Status
 
 ## Related Repositories
 
@@ -195,7 +195,16 @@ DISCONNECTED ──── First message ────► HEALTHY
 - **Demo Video:** [YouTube](https://www.youtube.com/watch?v=s6RZwZTwf14)
 - **ArduPilot Fork:** [GitHub](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor)
 
----
+**TODO:**
+- Services monitoring (track specific processes)
+- Hardware watchdog integration
+- DataFlash logging on FC
+- ArduPlane/Rover/Sub support
+- MAVLink upstream submission
+
+## Related
+
+- ArduPilot fork with FC code: [deepak61296/ardupilot](https://github.com/deepak61296/ardupilot) (branch: companion-computer-health-monitor)
 
 ## License
 
