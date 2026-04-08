@@ -1,4 +1,8 @@
-# Companion Computer Health Monitor for ArduPilot
+# Companion Computer Health Monitor
+
+MAVLink-based health monitoring for ArduPilot companion computers. Sends health metrics to the flight controller and triggers failsafe on timeout.
+
+## Demo Video
 
 [![Demo Video](https://img.youtube.com/vi/s6RZwZTwf14/maxresdefault.jpg)](https://www.youtube.com/watch?v=s6RZwZTwf14)
 
@@ -18,11 +22,15 @@
 
 ---
 
-## Project Overview
+## Hardware Testing
 
-Companion computers (Raspberry Pi, Jetson Nano, etc.) run critical software like vision processing, obstacle avoidance, and autonomous navigation. If the companion crashes or freezes, the flight controller has no way to know. The drone continues flying with dead navigation code.
+Tested on real hardware with CubeOrange flight controller:
 
-**Solution:** A health monitoring system where the companion sends periodic health messages to ArduPilot. If messages stop or report critical failure, the FC triggers a configurable failsafe.
+### Raspberry Pi 4
+![RPi Test](screenshots/test_health_rpi.png)
+
+### Jetson Nano
+![Jetson Test](screenshots/test_health_jetson.png)
 
 ---
 
@@ -40,7 +48,7 @@ Companion computers (Raspberry Pi, Jetson Nano, etc.) run critical software like
 - [x] **Platform Backends** - Raspberry Pi, Jetson, Generic Linux
 - [x] **Docker Support** - Dockerfile + docker-compose
 - [x] **SITL Testing** - Basic timeout test
-- [x] **Hardware Testing** - RPi4 + CubeOrange (USB)
+- [x] **Hardware Testing** - RPi4 + CubeOrange, Jetson + CubeOrange (USB)
 
 ### GSoC Work (Planned)
 
@@ -75,84 +83,28 @@ Companion computers (Raspberry Pi, Jetson Nano, etc.) run critical software like
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    COMPANION COMPUTER                        │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │              health_monitor.py                       │    │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────────────────┐  │    │
-│  │  │ Metrics │  │  State  │  │   Platform Backend  │  │    │
-│  │  │Collector│──│ Machine │──│ (RPi/Jetson/Generic)│  │    │
-│  │  └─────────┘  └─────────┘  └─────────────────────┘  │    │
-│  └──────────────────────┬──────────────────────────────┘    │
-│                         │ COMPANION_HEALTH @ 1Hz             │
-└─────────────────────────┼───────────────────────────────────┘
-                          │ MAVLink (USB/UART/UDP)
-┌─────────────────────────┼───────────────────────────────────┐
-│                         ▼         FLIGHT CONTROLLER          │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │              AP_CompanionHealth                      │    │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────────────────┐  │    │
-│  │  │ Message │  │  State  │  │  Failsafe Actions   │  │    │
-│  │  │ Handler │──│ Machine │──│ (RTL/Land/SmartRTL) │  │    │
-│  │  └─────────┘  └─────────┘  └─────────────────────┘  │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                         ArduCopter / ArduPlane / ArduRover   │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## State Machine
-
-```
-DISCONNECTED ──── First message ────► HEALTHY
-     ▲                                   │
-     │                          cpu>80% OR mem>80%
-     │                          OR temp>75C
-     │                                   ▼
-     │                               DEGRADED
-     │                                   │
-     │ Timeout                  cpu>95% OR mem>95%
-     │ (CCH_TIMEOUT)            OR temp>90C OR services down
-     │                                   ▼
-     └─────────────────────────────  CRITICAL ──► FAILSAFE
-```
-
----
-
 ## Quick Start
 
-### SITL Testing
-
 ```bash
-# Terminal 1: Start SITL
-cd ~/ardupilot
-./Tools/autotest/sim_vehicle.py -v ArduCopter --console
+# Clone
+git clone https://github.com/deepak61296/ap-companion-health-monitor-failsafe.git
+cd ap-companion-health-monitor-failsafe
 
-# In MAVProxy console:
-param set CCH_ENABLE 1
-param set CCH_TIMEOUT 5
-```
+# Setup
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-```bash
-# Terminal 2: Run companion script
-cd companion-health-monitor
-python3 health_monitor.py --device udpout:127.0.0.1:14560 -v
-```
+# Run (USB connection)
+python3 health_monitor.py --device /dev/ttyACM0 --verbose
 
-### Hardware (USB)
-
-```bash
-# Raspberry Pi or Jetson connected to CubeOrange via USB
-python3 health_monitor.py --device /dev/ttyACM0 --baud 115200 -v
+# Run (SITL)
+python3 health_monitor.py --device udpout:127.0.0.1:14560 --verbose
 ```
 
 ---
 
-## FC Parameters
+## Flight Controller Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -161,7 +113,7 @@ python3 health_monitor.py --device /dev/ttyACM0 --baud 115200 -v
 
 ---
 
-## COMPANION_HEALTH Message
+## COMPANION_HEALTH Message (ID 11061)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -174,7 +126,7 @@ python3 health_monitor.py --device /dev/ttyACM0 --baud 115200 -v
 | `gpu_load` | uint8 | GPU usage 0-100%, 255=N/A |
 | `status_flags` | uint8 | Warning flags bitmask |
 
-**Message ID:** 11061 | **Payload:** 13 bytes | **Rate:** 1 Hz
+**Payload:** 13 bytes | **Rate:** 1 Hz
 
 ---
 
@@ -186,26 +138,6 @@ python3 health_monitor.py --device /dev/ttyACM0 --baud 115200 -v
 | Jetson Nano/Xavier/Orin | sysfs thermal | tegrastats | GPU load |
 | Generic Linux | /sys/class/thermal | N/A | Standard /proc |
 | Docker | Host passthrough | Optional | Easy deployment |
-
----
-
-## Installation
-
-```bash
-git clone https://github.com/deepak61296/ap-companion-health-monitor-failsafe.git
-cd ap-companion-health-monitor-failsafe
-
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Build pymavlink with COMPANION_HEALTH
-
-```bash
-cd /path/to/ardupilot
-MDEF=modules/mavlink/message_definitions pip install modules/mavlink/pymavlink
-```
 
 ---
 
@@ -230,6 +162,24 @@ thresholds:
 
 ---
 
+## State Machine
+
+```
+DISCONNECTED ──── First message ────► HEALTHY
+     ▲                                   │
+     │                          cpu>80% OR mem>80%
+     │                          OR temp>75C
+     │                                   ▼
+     │                               DEGRADED
+     │                                   │
+     │ Timeout                  cpu>95% OR mem>95%
+     │ (CCH_TIMEOUT)            OR temp>90C OR services down
+     │                                   ▼
+     └─────────────────────────────  CRITICAL ──► FAILSAFE
+```
+
+---
+
 ## Related Repositories
 
 | Repository | Description |
@@ -239,21 +189,9 @@ thresholds:
 
 ---
 
-## Hardware Tested
-
-| Companion | Flight Controller | Connection | Status |
-|-----------|-------------------|------------|--------|
-| Raspberry Pi 4 | CubeOrange | USB | Tested |
-| Jetson Nano | CubeOrange | USB | Tested |
-| SITL | - | UDP | Tested |
-| Raspberry Pi 4 | CubeOrange | UART | Pending |
-| Jetson Nano | CubeOrange | UART | Pending |
-
----
-
 ## Project Links
 
-- **Proposal PDF:** [DeepakGSOC2026Proposal.pdf](proposal/DeepakGSOC2026Proposal.pdf)
+- **Proposal PDF:** Available in proposal folder
 - **Demo Video:** [YouTube](https://www.youtube.com/watch?v=s6RZwZTwf14)
 - **ArduPilot Fork:** [GitHub](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor)
 
