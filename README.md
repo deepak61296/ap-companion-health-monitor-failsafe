@@ -58,15 +58,39 @@ Tested with CubeOrange flight controller:
 ## Quick Start
 
 ```bash
+# Clone and install
 git clone https://github.com/deepak61296/ap-companion-health-monitor-failsafe.git
 cd ap-companion-health-monitor-failsafe
-pip install -r requirements.txt
+pip install -e .
 
-# SITL
-python3 health_monitor.py --device udpout:127.0.0.1:14560 -v
+# SITL testing
+python -m companion_health --device udpout:127.0.0.1:14560 -v
 
 # Hardware (USB)
-python3 health_monitor.py --device /dev/ttyACM0 -v
+python -m companion_health --device /dev/ttyACM0 -v
+
+# With config file
+python -m companion_health --config config/sitl.yaml -v
+```
+
+## Project Structure
+
+```
+companion-health-monitor/
+├── src/companion_health/     # Main package
+│   ├── cli.py                # Command-line interface
+│   ├── monitor.py            # HealthMonitor class
+│   ├── state.py              # State machine
+│   ├── config.py             # Configuration
+│   ├── mavlink.py            # MAVLink constants
+│   ├── backends/             # Platform backends
+│   └── services/             # Services monitoring (GSoC)
+├── tests/                    # Test suite
+│   ├── unit/                 # Fast unit tests
+│   └── integration/          # SITL/hardware tests
+├── config/                   # Example configs
+├── deploy/                   # Docker, systemd
+└── pyproject.toml            # Python packaging
 ```
 
 ## FC Parameters
@@ -90,6 +114,19 @@ Auto-detects and uses optimized backend:
 - **Raspberry Pi** - vcgencmd for temp, throttle detection
 - **Jetson** - tegrastats for GPU, thermal zones
 - **Generic Linux** - psutil + sysfs
+
+## Development
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/unit/ -v
+
+# Run linter
+flake8 src/
+```
 
 ## Related
 

@@ -1,8 +1,14 @@
-"""Tests for configuration handling."""
+"""
+Tests for configuration handling.
+
+AP_FLAKE8_CLEAN
+"""
+
+import os
+import tempfile
 
 import pytest
-import tempfile
-import os
+
 from companion_health.config import Config, ConnectionConfig, MonitoringConfig
 
 
@@ -36,6 +42,7 @@ class TestConfig:
         config = Config()
         assert config.connection is not None
         assert config.monitoring is not None
+        assert config.services == []
 
     def test_get_thresholds_dict(self):
         """get_thresholds_dict returns expected keys."""
@@ -55,6 +62,10 @@ connection:
 
 monitoring:
   rate_hz: 2.0
+
+services:
+  - mavproxy
+  - camera_node
 """
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             f.write(yaml_content)
@@ -64,12 +75,30 @@ monitoring:
                 assert config.connection.device == '/dev/ttyUSB0'
                 assert config.connection.baud == 57600
                 assert config.monitoring.rate_hz == 2.0
+                assert config.services == ['mavproxy', 'camera_node']
             finally:
                 os.unlink(f.name)
 
     def test_from_file_missing(self):
         """Config.from_file returns defaults for missing file."""
-        # Config.from_file gracefully handles missing files with a warning
         config = Config.from_file('/nonexistent/config.yaml')
-        # Should return a valid config with defaults
         assert config.connection is not None
+
+    def test_to_dict(self):
+        """Config can be converted to dict."""
+        config = Config()
+        d = config.to_dict()
+        assert 'connection' in d
+        assert 'monitoring' in d
+        assert 'thresholds' in d
+        assert 'services' in d
+
+    def test_from_dict(self):
+        """Config can be created from dict."""
+        data = {
+            'connection': {'device': '/dev/ttyACM0'},
+            'services': ['test_service'],
+        }
+        config = Config.from_dict(data)
+        assert config.connection.device == '/dev/ttyACM0'
+        assert config.services == ['test_service']

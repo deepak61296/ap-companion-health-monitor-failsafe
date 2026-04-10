@@ -1,0 +1,23 @@
+# Jetson Configuration
+# For Jetson Nano/Xavier/Orin with serial connection to FC
+
+connection:
+  device: "/dev/ttyTHS1"
+  baud: 921600
+  source_system: 1
+  source_component: 191
+
+monitoring:
+  rate_hz: 1.0
+  disk_path: "/"
+
+# Services to monitor (GSoC Week 1-2)
+services: []
+
+platform: "jetson"
+
+thresholds:
+  temp_throttle: 75.0
+  temp_overheat: 85.0
+  memory_low: 85
+  disk_low: 90

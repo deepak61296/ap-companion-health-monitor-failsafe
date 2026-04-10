@@ -1,6 +1,11 @@
-"""Tests for the state machine."""
+"""
+Tests for the state machine.
+
+AP_FLAKE8_CLEAN
+"""
 
 import pytest
+
 from companion_health.state import CompanionState, StateMachine
 
 
@@ -41,54 +46,55 @@ class TestStateMachine:
     def test_health_update_healthy(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu=30, memory=40, temp=450)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=450)
         assert sm.state == CompanionState.HEALTHY
 
     def test_health_update_degraded_cpu(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu=85, memory=40, temp=450)
+        sm.update_health(status_flags=0, cpu_pct=85, memory_pct=40, temp_cdeg=450)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_degraded_memory(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu=30, memory=85, temp=450)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=85, temp_cdeg=450)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_degraded_temp(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu=30, memory=40, temp=780)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=780)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_degraded_flags(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0x01, cpu=30, memory=40, temp=450)
+        sm.update_health(status_flags=0x01, cpu_pct=30, memory_pct=40, temp_cdeg=450)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_critical_cpu(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu=98, memory=40, temp=450)
+        sm.update_health(status_flags=0, cpu_pct=98, memory_pct=40, temp_cdeg=450)
         assert sm.state == CompanionState.CRITICAL
 
     def test_health_update_critical_temp(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu=30, memory=40, temp=920)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=920)
         assert sm.state == CompanionState.CRITICAL
 
     def test_health_update_critical_flag(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0x02, cpu=30, memory=40, temp=450)
+        # 0x02 = STATUS_FLAG_OVERHEATING
+        sm.update_health(status_flags=0x02, cpu_pct=30, memory_pct=40, temp_cdeg=450)
         assert sm.state == CompanionState.CRITICAL
 
     def test_health_update_requires_connection(self):
         sm = StateMachine()
-        sm.update_health(status_flags=0, cpu=30, memory=40, temp=450)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=450)
         assert sm.state == CompanionState.DISCONNECTED
 
     def test_transition_returns_false_for_same_state(self):
@@ -100,3 +106,17 @@ class TestStateMachine:
         assert sm.get_status_string() == "DISCONNECTED"
         sm.on_connect_success()
         assert sm.get_status_string() == "HEALTHY"
+
+    def test_time_in_state(self):
+        sm = StateMachine()
+        assert sm.time_in_state_s >= 0
+        sm.on_connect_success()
+        assert sm.time_in_state_s >= 0
+
+    def test_last_transition(self):
+        sm = StateMachine()
+        assert sm.last_transition is None
+        sm.on_connect_success()
+        assert sm.last_transition is not None
+        assert sm.last_transition.from_state == CompanionState.DISCONNECTED
+        assert sm.last_transition.to_state == CompanionState.HEALTHY

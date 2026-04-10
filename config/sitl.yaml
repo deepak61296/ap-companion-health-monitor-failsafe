@@ -1,0 +1,16 @@
+# SITL Configuration
+# For testing with ArduPilot SITL simulator
+
+connection:
+  device: "udpout:127.0.0.1:14560"
+  source_system: 1
+  source_component: 191
+
+monitoring:
+  rate_hz: 1.0
+  disk_path: "/"
+
+# No services monitoring for SITL testing
+services: []
+
+platform: "generic"

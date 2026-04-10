@@ -1,8 +1,11 @@
-"""Main health monitor implementation."""
+"""
+Main health monitor implementation.
+
+AP_FLAKE8_CLEAN
+"""
 
 import logging
 import os
-import struct
 import time
 from typing import Optional
 
@@ -13,25 +16,28 @@ from pymavlink import mavutil
 
 from .backends import MetricsBackend, detect_backend
 from .config import Config
+from .mavlink import (
+    COMPANION_HEALTH_CRC_EXTRA,
+    MAV_AUTOPILOT_INVALID,
+    MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+    MAV_STATE_ACTIVE,
+    MAV_TYPE_ONBOARD_CONTROLLER,
+    MAVLINK_MSG_ID_COMPANION_HEALTH,
+    send_companion_health_raw,
+)
 from .state import CompanionState, StateMachine
 
 log = logging.getLogger(__name__)
-
-# COMPANION_HEALTH message ID and CRC
-MAVLINK_MSG_ID_COMPANION_HEALTH = 11061
-COMPANION_HEALTH_CRC_EXTRA = 81
-
-# MAVLink component type for onboard computer
-MAV_TYPE_ONBOARD_CONTROLLER = 18
-MAV_AUTOPILOT_INVALID = 8
-MAV_MODE_FLAG_CUSTOM_MODE_ENABLED = 1
-MAV_STATE_ACTIVE = 4
 
 
 class HealthMonitor:
     """Monitors companion computer health and sends MAVLink messages."""
 
-    def __init__(self, config: Config, backend: Optional[MetricsBackend] = None):
+    def __init__(
+        self,
+        config: Config,
+        backend: Optional[MetricsBackend] = None
+    ) -> None:
         """Initialize the health monitor.
 
         Args:
@@ -39,7 +45,7 @@ class HealthMonitor:
             backend: Optional metrics backend (auto-detected if not provided)
         """
         self.config = config
-        self.mav = None
+        self.mav: Optional[mavutil.mavfile] = None
         self.watchdog_seq = 0
         self.running = False
         self.state_machine = StateMachine()
@@ -122,40 +128,6 @@ class HealthMonitor:
             log.error("Failed to send heartbeat: %s", e)
             return False
 
-    def _send_companion_health_raw(self, services_status, watchdog_seq,
-                                    temperature, cpu_load, memory_used,
-                                    disk_used, gpu_load, status_flags):
-        """Send COMPANION_HEALTH as raw MAVLink2 packet (for old pymavlink)."""
-        # Pack payload: uint32 + uint16 + int16 + 5x uint8 = 14 bytes
-        payload = struct.pack('<IHhBBBBB',
-            services_status, watchdog_seq, temperature,
-            cpu_load, memory_used, disk_used, gpu_load, status_flags
-        )
-
-        seq = self.mav.mav.seq
-        self.mav.mav.seq = (seq + 1) % 256
-
-        # MAVLink2 header
-        header = struct.pack('<BBBBBBBHB',
-            0xFD,  # MAVLink2 magic
-            len(payload),
-            0,  # incompat_flags
-            0,  # compat_flags
-            seq,
-            self.mav.mav.srcSystem,
-            self.mav.mav.srcComponent,
-            MAVLINK_MSG_ID_COMPANION_HEALTH & 0xFFFF,
-            (MAVLINK_MSG_ID_COMPANION_HEALTH >> 16) & 0xFF
-        )
-
-        # Calculate CRC
-        crc = mavutil.x25crc(header[1:])
-        crc.accumulate(payload)
-        crc.accumulate_str(chr(COMPANION_HEALTH_CRC_EXTRA))
-
-        # Send packet
-        self.mav.write(header + payload + struct.pack('<H', crc.crc))
-
     def send_health(self) -> bool:
         """Collect metrics and send COMPANION_HEALTH message.
 
@@ -191,7 +163,8 @@ class HealthMonitor:
                     status_flags=metrics.status_flags
                 )
             else:
-                self._send_companion_health_raw(
+                send_companion_health_raw(
+                    self.mav,
                     services_status=0,
                     watchdog_seq=self.watchdog_seq,
                     temperature=metrics.temperature,
@@ -229,7 +202,7 @@ class HealthMonitor:
         if not self.connect():
             return 1
 
-        interval = 1.0 / self.config.monitoring.rate_hz
+        interval_s = 1.0 / self.config.monitoring.rate_hz
         self.running = True
 
         log.info("Sending COMPANION_HEALTH at %.1f Hz", self.config.monitoring.rate_hz)
@@ -239,12 +212,12 @@ class HealthMonitor:
             self.send_heartbeat()
             self.send_health()
             elapsed = time.monotonic() - start
-            sleep_time = max(0, interval - elapsed)
+            sleep_time = max(0, interval_s - elapsed)
             time.sleep(sleep_time)
 
         log.info("Stopped")
         return 0
 
-    def stop(self):
+    def stop(self) -> None:
         """Signal the main loop to stop."""
         self.running = False

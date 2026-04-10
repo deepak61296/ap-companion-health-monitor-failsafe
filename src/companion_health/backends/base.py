@@ -1,8 +1,19 @@
-"""Abstract base class for platform-specific metric collection."""
+"""
+Abstract base class for platform-specific metric collection.
+
+AP_FLAKE8_CLEAN
+"""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, Optional
+
+from ..mavlink import (
+    STATUS_FLAG_LOW_DISK,
+    STATUS_FLAG_LOW_MEMORY,
+    STATUS_FLAG_OVERHEATING,
+    STATUS_FLAG_THROTTLED,
+)
 
 
 @dataclass
@@ -16,13 +27,6 @@ class HealthMetrics:
     status_flags: int       # Bitmask of status flags
 
 
-# Status flag bit positions
-FLAG_THROTTLED = 0x01
-FLAG_OVERHEATING = 0x02
-FLAG_LOW_MEMORY = 0x04
-FLAG_LOW_DISK = 0x08
-
-
 class MetricsBackend(ABC):
     """Abstract base class for platform-specific metric collection.
 
@@ -30,7 +34,13 @@ class MetricsBackend(ABC):
     CPU, memory, disk, temperature, and GPU metrics.
     """
 
-    def __init__(self, config: Optional[dict] = None):
+    # Default thresholds
+    DEFAULT_TEMP_THROTTLE_C = 80.0
+    DEFAULT_TEMP_OVERHEAT_C = 85.0
+    DEFAULT_MEMORY_LOW_PCT = 90
+    DEFAULT_DISK_LOW_PCT = 95
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         """Initialize backend with optional configuration.
 
         Args:
@@ -56,7 +66,10 @@ class MetricsBackend(ABC):
 
     @abstractmethod
     def get_temperature(self) -> int:
-        """Return board temperature in celsius * 10, or 0 if unavailable."""
+        """Return board temperature in decidegrees (celsius * 10).
+
+        Returns 0 if temperature sensor unavailable.
+        """
         ...
 
     @abstractmethod
@@ -69,34 +82,39 @@ class MetricsBackend(ABC):
         """Return human-readable platform name."""
         ...
 
-    def get_status_flags(self, temperature: int, memory: int, disk: int) -> int:
+    def get_status_flags(
+        self,
+        temp_cdeg: int,
+        memory_pct: int,
+        disk_pct: int
+    ) -> int:
         """Calculate status flags based on current metrics.
 
         Args:
-            temperature: Temperature in decidegrees (celsius * 10)
-            memory: Memory usage percentage
-            disk: Disk usage percentage
+            temp_cdeg: Temperature in decidegrees (celsius * 10)
+            memory_pct: Memory usage percentage
+            disk_pct: Disk usage percentage
 
         Returns:
             Bitmask of status flags
         """
         thresholds = self.config.get('thresholds', {})
-        temp_throttle = thresholds.get('temp_throttle', 80.0)
-        temp_overheat = thresholds.get('temp_overheat', 85.0)
-        memory_low = thresholds.get('memory_low', 90)
-        disk_low = thresholds.get('disk_low', 95)
+        temp_throttle = thresholds.get('temp_throttle', self.DEFAULT_TEMP_THROTTLE_C)
+        temp_overheat = thresholds.get('temp_overheat', self.DEFAULT_TEMP_OVERHEAT_C)
+        memory_low = thresholds.get('memory_low', self.DEFAULT_MEMORY_LOW_PCT)
+        disk_low = thresholds.get('disk_low', self.DEFAULT_DISK_LOW_PCT)
 
         flags = 0
-        temp_celsius = temperature / 10.0
+        temp_c = temp_cdeg / 10.0
 
-        if temp_celsius > temp_throttle:
-            flags |= FLAG_THROTTLED
-        if temp_celsius > temp_overheat:
-            flags |= FLAG_OVERHEATING
-        if memory > memory_low:
-            flags |= FLAG_LOW_MEMORY
-        if disk > disk_low:
-            flags |= FLAG_LOW_DISK
+        if temp_c > temp_throttle:
+            flags |= STATUS_FLAG_THROTTLED
+        if temp_c > temp_overheat:
+            flags |= STATUS_FLAG_OVERHEATING
+        if memory_pct > memory_low:
+            flags |= STATUS_FLAG_LOW_MEMORY
+        if disk_pct > disk_low:
+            flags |= STATUS_FLAG_LOW_DISK
 
         return flags
 

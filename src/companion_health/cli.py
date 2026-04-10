@@ -1,30 +1,28 @@
-#!/usr/bin/env python3
 """
-Companion Computer Health Monitor for ArduPilot
+Command-line interface for companion health monitor.
 
-Sends COMPANION_HEALTH MAVLink messages to the flight controller at a
-configurable rate. Supports both serial and UDP connections.
-
-Usage:
-    # With config file:
-    python health_monitor.py --config config.yaml
-
-    # SITL (UDP):
-    python health_monitor.py --device udpout:127.0.0.1:14560
-
-    # Serial (USB):
-    python health_monitor.py --device /dev/ttyACM0 --baud 115200
+AP_FLAKE8_CLEAN
 """
 
 import argparse
 import logging
 import signal
 import sys
+from typing import List, Optional
 
-from companion_health import Config, HealthMonitor
+from .config import Config
+from .monitor import HealthMonitor
 
 
-def parse_args():
+def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Args:
+        args: Arguments to parse (defaults to sys.argv)
+
+    Returns:
+        Parsed arguments namespace
+    """
     parser = argparse.ArgumentParser(
         description='Companion Computer Health Monitor for ArduPilot',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -81,11 +79,23 @@ Examples:
         action='store_true',
         help='Enable debug logging'
     )
-    return parser.parse_args()
+    parser.add_argument(
+        '--version',
+        action='store_true',
+        help='Show version and exit'
+    )
+    return parser.parse_args(args)
 
 
-def build_config(args) -> Config:
-    """Build configuration from args and optional config file."""
+def build_config(args: argparse.Namespace) -> Config:
+    """Build configuration from args and optional config file.
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        Config instance
+    """
     # Start with config file if provided
     if args.config:
         config = Config.from_file(args.config)
@@ -109,19 +119,32 @@ def build_config(args) -> Config:
     return config
 
 
-def main():
-    args = parse_args()
+def main(args: Optional[List[str]] = None) -> int:
+    """Main entry point.
+
+    Args:
+        args: Command-line arguments (defaults to sys.argv)
+
+    Returns:
+        Exit code
+    """
+    parsed = parse_args(args)
+
+    if parsed.version:
+        from . import __version__
+        print(f"companion-health-monitor {__version__}")
+        return 0
 
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=logging.DEBUG if parsed.verbose else logging.INFO,
         format='%(asctime)s %(levelname)s: %(message)s',
         datefmt='%H:%M:%S'
     )
 
-    config = build_config(args)
+    config = build_config(parsed)
     monitor = HealthMonitor(config)
 
-    def signal_handler(signum, frame):
+    def signal_handler(signum: int, frame) -> None:
         logging.info("Received signal %d, stopping...", signum)
         monitor.stop()
 

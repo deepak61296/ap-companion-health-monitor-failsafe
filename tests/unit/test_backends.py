@@ -1,8 +1,19 @@
-"""Tests for metric collection backends."""
+"""
+Tests for metric collection backends.
+
+AP_FLAKE8_CLEAN
+"""
 
 import pytest
-from companion_health.backends.base import HealthMetrics, MetricsBackend, FLAG_THROTTLED, FLAG_OVERHEATING, FLAG_LOW_MEMORY, FLAG_LOW_DISK
+
+from companion_health.backends.base import HealthMetrics
 from companion_health.backends.generic import GenericBackend
+from companion_health.mavlink import (
+    STATUS_FLAG_LOW_DISK,
+    STATUS_FLAG_LOW_MEMORY,
+    STATUS_FLAG_OVERHEATING,
+    STATUS_FLAG_THROTTLED,
+)
 
 
 class TestHealthMetrics:
@@ -31,14 +42,19 @@ class TestStatusFlags:
 
     def test_flag_values(self):
         """Flags have expected bit positions."""
-        assert FLAG_THROTTLED == 0x01
-        assert FLAG_OVERHEATING == 0x02
-        assert FLAG_LOW_MEMORY == 0x04
-        assert FLAG_LOW_DISK == 0x08
+        assert STATUS_FLAG_THROTTLED == 0x01
+        assert STATUS_FLAG_OVERHEATING == 0x02
+        assert STATUS_FLAG_LOW_MEMORY == 0x04
+        assert STATUS_FLAG_LOW_DISK == 0x08
 
     def test_flags_are_distinct(self):
         """All flags can be combined."""
-        combined = FLAG_THROTTLED | FLAG_OVERHEATING | FLAG_LOW_MEMORY | FLAG_LOW_DISK
+        combined = (
+            STATUS_FLAG_THROTTLED
+            | STATUS_FLAG_OVERHEATING
+            | STATUS_FLAG_LOW_MEMORY
+            | STATUS_FLAG_LOW_DISK
+        )
         assert combined == 0x0F
 
 
@@ -91,29 +107,29 @@ class TestGenericBackend:
     def test_status_flags_throttled(self):
         """High temperature sets throttled flag."""
         backend = GenericBackend({'thresholds': {'temp_throttle': 80.0}})
-        flags = backend.get_status_flags(temperature=850, memory=50, disk=50)
-        assert flags & FLAG_THROTTLED
+        flags = backend.get_status_flags(temp_cdeg=850, memory_pct=50, disk_pct=50)
+        assert flags & STATUS_FLAG_THROTTLED
 
     def test_status_flags_overheating(self):
         """Very high temperature sets overheating flag."""
         backend = GenericBackend({'thresholds': {'temp_overheat': 85.0}})
-        flags = backend.get_status_flags(temperature=900, memory=50, disk=50)
-        assert flags & FLAG_OVERHEATING
+        flags = backend.get_status_flags(temp_cdeg=900, memory_pct=50, disk_pct=50)
+        assert flags & STATUS_FLAG_OVERHEATING
 
     def test_status_flags_low_memory(self):
         """High memory usage sets low memory flag."""
         backend = GenericBackend({'thresholds': {'memory_low': 90}})
-        flags = backend.get_status_flags(temperature=450, memory=95, disk=50)
-        assert flags & FLAG_LOW_MEMORY
+        flags = backend.get_status_flags(temp_cdeg=450, memory_pct=95, disk_pct=50)
+        assert flags & STATUS_FLAG_LOW_MEMORY
 
     def test_status_flags_low_disk(self):
         """High disk usage sets low disk flag."""
         backend = GenericBackend({'thresholds': {'disk_low': 95}})
-        flags = backend.get_status_flags(temperature=450, memory=50, disk=98)
-        assert flags & FLAG_LOW_DISK
+        flags = backend.get_status_flags(temp_cdeg=450, memory_pct=50, disk_pct=98)
+        assert flags & STATUS_FLAG_LOW_DISK
 
     def test_status_flags_normal(self):
         """Normal metrics return no flags."""
         backend = GenericBackend()
-        flags = backend.get_status_flags(temperature=450, memory=50, disk=50)
+        flags = backend.get_status_flags(temp_cdeg=450, memory_pct=50, disk_pct=50)
         assert flags == 0

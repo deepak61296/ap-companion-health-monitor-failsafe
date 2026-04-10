@@ -1,9 +1,13 @@
-"""Generic Linux backend using psutil for cross-platform metrics."""
+"""
+Generic Linux backend using psutil for cross-platform metrics.
+
+AP_FLAKE8_CLEAN
+"""
 
 import logging
 import os
 import subprocess
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import psutil
 
@@ -28,7 +32,7 @@ class GenericBackend(MetricsBackend):
     Supports NVIDIA GPUs via nvidia-smi.
     """
 
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(config)
         self._temp_sensor_path: Optional[str] = None
         self._has_nvidia_smi: Optional[bool] = None
@@ -64,7 +68,7 @@ class GenericBackend(MetricsBackend):
             try:
                 with open(self._temp_sensor_path, 'r') as f:
                     temp_milli = int(f.read().strip())
-                    return temp_milli // 100  # millidegrees to decidegrees
+                    return temp_milli // 100
             except (IOError, ValueError):
                 self._temp_sensor_path = None
 
@@ -117,11 +121,11 @@ class GenericBackend(MetricsBackend):
         if os.path.exists(tegra_path):
             try:
                 with open(tegra_path, 'r') as f:
-                    return int(f.read().strip()) // 10  # 0-1000 to 0-100
+                    return int(f.read().strip()) // 10
             except Exception:
                 pass
 
-        return 255  # GPU not available
+        return 255
 
     def _check_nvidia_smi(self) -> bool:
         """Check if nvidia-smi is available."""

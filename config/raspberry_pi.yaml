@@ -1,0 +1,23 @@
+# Raspberry Pi Configuration
+# For RPi 3/4/5 with serial connection to FC
+
+connection:
+  device: "/dev/ttyAMA0"
+  baud: 921600
+  source_system: 1
+  source_component: 191
+
+monitoring:
+  rate_hz: 1.0
+  disk_path: "/"
+
+# Services to monitor (GSoC Week 1-2)
+services: []
+
+platform: "raspberry_pi"
+
+thresholds:
+  temp_throttle: 70.0   # Pi throttles at 80C
+  temp_overheat: 80.0
+  memory_low: 85
+  disk_low: 90

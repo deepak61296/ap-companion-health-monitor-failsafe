@@ -1,4 +1,8 @@
-"""Raspberry Pi backend with vcgencmd integration."""
+"""
+Raspberry Pi backend with vcgencmd integration.
+
+AP_FLAKE8_CLEAN
+"""
 
 import logging
 import os

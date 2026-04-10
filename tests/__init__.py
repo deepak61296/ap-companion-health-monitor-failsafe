@@ -1,1 +1,1 @@
-# tests
+"""Companion health monitor tests."""

@@ -1,4 +1,8 @@
-"""NVIDIA Jetson backend with tegrastats integration."""
+"""
+NVIDIA Jetson backend with tegrastats integration.
+
+AP_FLAKE8_CLEAN
+"""
 
 import logging
 import os

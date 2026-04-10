@@ -10,6 +10,7 @@ env/
 *.egg-info/
 dist/
 build/
+wheels/
 
 # Config (user-specific)
 config.yaml
@@ -30,4 +31,11 @@ Thumbs.db
 # SITL artifacts
 eeprom.bin
 terrain/
-*.bin
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking
+.mypy_cache/
