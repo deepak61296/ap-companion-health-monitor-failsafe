@@ -10,7 +10,7 @@ Sends health telemetry from companion computers (RPi, Jetson, etc.) to ArduPilot
   <img src="https://img.youtube.com/vi/s6RZwZTwf14/0.jpg" alt="Demo Video" width="480">
 </a>
 
-Click to watch - shows failsafe triggering when health monitor stops.
+Click to watch - shows qgc showing companion health messages
 
 ## Hardware Tests
 
@@ -22,24 +22,79 @@ Tested with CubeOrange flight controller:
 **Jetson Nano**
 ![Jetson Test](screenshots/test_health_jetson.png)
 
-## What's Working (Pre-GSoC)
+## CURRENT PROGRESS
 
-- [x] COMPANION_HEALTH MAVLink message (ID 11061)
-- [x] FC library with timeout-based failsafe
-- [x] CCH_ENABLE and CCH_TIMEOUT parameters
-- [x] ArduCopter integration
-- [x] Python script with platform backends (RPi, Jetson, Generic)
-- [x] Docker support
-- [x] SITL and hardware testing
+I have built a working implementation (v0.1) before GSoC that demonstrates end-to-end
+functionality. The FC library receives health messages, tracks state, and triggers failsafe on
+timeout. The companion script collects metrics and sends them over MAVLink. Hardware
+tests on Raspberry Pi 4 and Jetson Nano with Cube Orange confirm the system works on
+real hardware. Demo videos and All Progress will be added to the README of the repository
+given below (Companion Repository).
 
-## GSoC Work (Planned)
+Also here is a demo video of working v0.1
 
-- [ ] Services monitoring (track critical processes)
-- [ ] Watchdog stall detection
-- [ ] DataFlash logging
-- [ ] Arming check
-- [ ] ArduPlane/Rover support
-- [ ] MAVLink upstream PR
+During GSoC, everything will be properly reviewed with mentors, refactored based on
+feedback, and tested thoroughly and will discusses about edge cases with mentor.
+
+### Repositories
+
+| Repository | Description |
+|------------|-------------|
+| ArduPilot fork | FC library on branch `companion-computer-health-monitor` |
+| Companion Repository | Actual health monitor code that will run on Companion |
+
+### Pre-GSoC Implementation v0.1 (Complete)
+
+| Component | Files / Details |
+|-----------|-----------------|
+| MAVLink message (local) | `ardupilotmega.xml` - `COMPANION_HEALTH` message |
+| FC: Message handling | `AP_CompanionHealth.cpp` - receive and store metrics |
+| FC: Timeout failsafe | `AP_CompanionHealth.cpp` - basic timeout detection |
+| FC: Parameters | `CCH_ENABLE`, `CCH_TIMEOUT` in `AP_CompanionHealth.h` |
+| FC: Copter integration | `ArduCopter/Copter.h`, `events.cpp` |
+| FC: GCS messages | Status text via `GCS_SEND_TEXT()` |
+| Companion: Metrics | `health_monitor.py` - CPU, memory, temperature |
+| Companion: Platforms | `platforms/` - RPi, Jetson, Generic backends |
+| Companion: Config | `config.yaml` parsing |
+| Testing: SITL | Basic timeout test |
+| Testing: Hardware | RPi4 + CubeOrange (USB), Jetson + CubeOrange (USB) |
+
+### GSoC Work (To Do)
+
+| Task | Files to Create / Modify |
+|------|--------------------------|
+| review and finalize architecture with mentor | Refactor `AP_CompanionHealth.cpp` based on feedback |
+| `services_status` check | `AP_CompanionHealth.cpp` - add bitmask logic |
+| `CCH_SVC_MASK` parameter | `AP_CompanionHealth.h` - new parameter |
+| Watchdog stall detection | `AP_CompanionHealth.cpp` - compare seq values |
+| DataFlash logging | `AP_Logger/LogStructure.h`, `Write_CCH()` function |
+| Arming check | `AP_Arming.cpp` - optional block if `CCH_ENABLE != 0` and companion state is `DISCONNECTED` or `CRITICAL` |
+| Services monitoring | `health_monitor.py` - `ServicesMonitor` class |
+| Spike filtering | `health_monitor.py` - `collections.deque` filter |
+| Auto-reconnect | `health_monitor.py` - exponential backoff |
+| systemd service | `systemd/health_monitor.service` |
+| Installer script | `setup.sh` |
+| Docker support | `Dockerfile`, `docker-compose.yml` |
+| ArduPlane integration | `ArduPlane/events.cpp`, `Parameters.cpp` |
+| ArduRover integration | `Rover/failsafe.cpp`, `Parameters.cpp` |
+| SITL test suite | `Tools/autotest/test_companion_health.py` |
+| CI integration | GitHub Actions workflow |
+| MAVLink PR | Submit initial MAVLink PR to `mavlink/mavlink` by midterm and iterate based on mentor and community feedback |
+| Wiki documentation | ArduPilot wiki pages |
+
+### Future Scope
+
+I will continue maintaining this project beyond GSoC and plan to test it with other
+companion computer based previous year GSoC projects in ArduPilot.
+
+Additional platform backends - if i get more newer hardware after GSoC. I will
+continue to add support for newer boards like Arduino Uno Q, Arduino Ventuno Q
+and more upcoming Single Board Computers.
+
+MAVSDK-based implementation - The companion script uses `pymavlink`, which is
+lightweight. For resource-constrained boards, a C++ implementation using MAVSDK
+could offer better performance. This would be a separate implementation, not a
+replacement.
 
 ## Timeline
 
