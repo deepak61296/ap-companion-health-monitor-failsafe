@@ -1,7 +1,5 @@
 """
 MAVLink constants and utilities for COMPANION_HEALTH message.
-
-AP_FLAKE8_CLEAN
 """
 
 import struct

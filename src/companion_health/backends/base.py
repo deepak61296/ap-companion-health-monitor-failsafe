@@ -1,7 +1,5 @@
 """
 Abstract base class for platform-specific metric collection.
-
-AP_FLAKE8_CLEAN
 """
 
 from abc import ABC, abstractmethod

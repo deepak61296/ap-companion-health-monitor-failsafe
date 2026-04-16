@@ -1,7 +1,5 @@
 """
 Raspberry Pi backend with vcgencmd integration.
-
-AP_FLAKE8_CLEAN
 """
 
 import logging
@@ -60,7 +58,7 @@ class RaspberryPiBackend(MetricsBackend):
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except Exception:
+        except (OSError, subprocess.TimeoutExpired):
             pass
         return None
 
@@ -70,19 +68,19 @@ class RaspberryPiBackend(MetricsBackend):
     def get_cpu_load(self) -> int:
         try:
             return int(psutil.cpu_percent(interval=None))
-        except Exception:
+        except (OSError, ValueError):
             return 0
 
     def get_memory_used(self) -> int:
         try:
             return int(psutil.virtual_memory().percent)
-        except Exception:
+        except (OSError, AttributeError):
             return 0
 
     def get_disk_used(self, path: str = '/') -> int:
         try:
             return int(psutil.disk_usage(path).percent)
-        except Exception:
+        except (OSError, AttributeError):
             return 0
 
     def get_temperature(self) -> int:
@@ -101,7 +99,7 @@ class RaspberryPiBackend(MetricsBackend):
         try:
             with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
                 return int(f.read().strip()) // 100
-        except Exception:
+        except (IOError, ValueError):
             pass
 
         if not self._temp_warning_logged:

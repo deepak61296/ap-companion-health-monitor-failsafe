@@ -1,7 +1,5 @@
 """
 State machine for companion health tracking.
-
-AP_FLAKE8_CLEAN
 """
 
 import time

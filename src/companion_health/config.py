@@ -1,7 +1,5 @@
 """
 Configuration management for companion health monitor.
-
-AP_FLAKE8_CLEAN
 """
 
 import logging

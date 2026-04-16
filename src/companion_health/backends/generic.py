@@ -1,7 +1,5 @@
 """
 Generic Linux backend using psutil for cross-platform metrics.
-
-AP_FLAKE8_CLEAN
 """
 
 import logging

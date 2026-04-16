@@ -1,7 +1,5 @@
 """
 Main health monitor implementation.
-
-AP_FLAKE8_CLEAN
 """
 
 import logging

@@ -1,7 +1,5 @@
 """
 NVIDIA Jetson backend with tegrastats integration.
-
-AP_FLAKE8_CLEAN
 """
 
 import logging
@@ -54,7 +52,7 @@ class JetsonBackend(MetricsBackend):
                     content = f.read()
                     if 'R32' in content or 'R34' in content or 'R35' in content:
                         self._jetson_model = self._parse_jetson_model()
-            except Exception:
+            except IOError:
                 pass
 
         # Find GPU load path
@@ -94,7 +92,7 @@ class JetsonBackend(MetricsBackend):
                     elif 'TX2' in model:
                         return 'Jetson TX2'
                     return model
-        except Exception:
+        except IOError:
             pass
         return 'Jetson'
 
@@ -104,19 +102,19 @@ class JetsonBackend(MetricsBackend):
     def get_cpu_load(self) -> int:
         try:
             return int(psutil.cpu_percent(interval=None))
-        except Exception:
+        except (OSError, ValueError):
             return 0
 
     def get_memory_used(self) -> int:
         try:
             return int(psutil.virtual_memory().percent)
-        except Exception:
+        except (OSError, AttributeError):
             return 0
 
     def get_disk_used(self, path: str = '/') -> int:
         try:
             return int(psutil.disk_usage(path).percent)
-        except Exception:
+        except (OSError, AttributeError):
             return 0
 
     def get_temperature(self) -> int:
@@ -127,7 +125,7 @@ class JetsonBackend(MetricsBackend):
                     # Value is in millidegrees
                     temp_milli = int(f.read().strip())
                     return temp_milli // 100  # Convert to decidegrees
-            except Exception:
+            except (IOError, ValueError):
                 pass
 
         # Fallback: try all thermal zones and take highest
@@ -138,7 +136,7 @@ class JetsonBackend(MetricsBackend):
                     with open(path, 'r') as f:
                         temp = int(f.read().strip()) // 100
                         max_temp = max(max_temp, temp)
-                except Exception:
+                except (IOError, ValueError):
                     continue
 
         if max_temp > 0:
@@ -157,7 +155,7 @@ class JetsonBackend(MetricsBackend):
                     # Value is 0-1000 (permille)
                     load = int(f.read().strip())
                     return load // 10  # Convert to percentage
-            except Exception:
+            except (IOError, ValueError):
                 pass
 
         return 255  # Not available
@@ -174,7 +172,7 @@ class JetsonBackend(MetricsBackend):
                 for line in result.stdout.split('\n'):
                     if 'NV Power Mode' in line:
                         return line.split(':')[-1].strip()
-        except Exception:
+        except (OSError, subprocess.TimeoutExpired):
             pass
         return None
 
@@ -194,7 +192,7 @@ class JetsonBackend(MetricsBackend):
             try:
                 with open(gpu_freq_path, 'r') as f:
                     stats['gpu_freq'] = int(f.read().strip()) // 1000000  # Hz to MHz
-            except Exception:
+            except (IOError, ValueError):
                 pass
 
         # Try to get power from INA sensors (varies by model)
@@ -208,7 +206,7 @@ class JetsonBackend(MetricsBackend):
                     with open(path, 'r') as f:
                         stats['power'] = int(f.read().strip())  # mW
                         break
-                except Exception:
+                except (IOError, ValueError):
                     continue
 
         return stats
