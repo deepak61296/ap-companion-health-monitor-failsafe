@@ -2,8 +2,6 @@
 Services monitor for tracking critical processes.
 
 GSoC Week 1-2 implementation placeholder.
-
-AP_FLAKE8_CLEAN
 """
 
 import logging

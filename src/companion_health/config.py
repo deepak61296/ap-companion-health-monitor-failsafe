@@ -92,8 +92,11 @@ class Config:
         try:
             with open(path, 'r') as f:
                 data = yaml.safe_load(f) or {}
-        except Exception as e:
-            log.error("Failed to load config from %s: %s", path, e)
+        except IOError as e:
+            log.error("Failed to read config from %s (IOError): %s", path, e)
+            return cls()
+        except yaml.YAMLError as e:
+            log.error("Failed to parse config from %s (YAMLError): %s", path, e)
             return cls()
 
         return cls.from_dict(data)

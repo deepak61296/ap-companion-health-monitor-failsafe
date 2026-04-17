@@ -1,7 +1,5 @@
 """
 Entry point for python -m companion_health.
-
-AP_FLAKE8_CLEAN
 """
 
 import sys

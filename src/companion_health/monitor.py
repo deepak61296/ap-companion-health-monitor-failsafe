@@ -14,6 +14,7 @@ from pymavlink import mavutil
 
 from .backends import MetricsBackend, detect_backend
 from .config import Config
+from .services import ServicesMonitor
 from .mavlink import (
     COMPANION_HEALTH_CRC_EXTRA,
     MAV_AUTOPILOT_INVALID,
@@ -48,6 +49,7 @@ class HealthMonitor:
         self.running = False
         self.state_machine = StateMachine()
         self._last_metrics = None
+        self.services_monitor = ServicesMonitor(self.config.services)
 
         # Set up backend with threshold config
         if backend is None:
@@ -105,8 +107,11 @@ class HealthMonitor:
             self.state_machine.on_connect_success()
             log.info("Connected successfully (state: %s)", self.state.name)
             return True
-        except Exception as e:
-            log.error("Failed to connect: %s", e)
+        except IOError as e:
+            log.error("Failed to connect (IOError): %s", e)
+            return False
+        except ValueError as e:
+            log.error("Failed to connect (Invalid parameters): %s", e)
             return False
 
     def send_heartbeat(self) -> bool:
@@ -122,8 +127,8 @@ class HealthMonitor:
                 MAV_STATE_ACTIVE
             )
             return True
-        except Exception as e:
-            log.error("Failed to send heartbeat: %s", e)
+        except IOError as e:
+            log.error("Failed to send heartbeat (IOError): %s", e)
             return False
 
     def send_health(self) -> bool:
@@ -147,11 +152,13 @@ class HealthMonitor:
             metrics.temperature
         )
 
+        services_status = self.services_monitor.get_status()
+
         try:
             # Try native method first, fall back to raw packet
             if hasattr(self.mav.mav, 'companion_health_send'):
                 self.mav.mav.companion_health_send(
-                    services_status=0,
+                    services_status=services_status,
                     watchdog_seq=self.watchdog_seq,
                     temperature=metrics.temperature,
                     cpu_load=metrics.cpu_load,
@@ -163,7 +170,7 @@ class HealthMonitor:
             else:
                 send_companion_health_raw(
                     self.mav,
-                    services_status=0,
+                    services_status=services_status,
                     watchdog_seq=self.watchdog_seq,
                     temperature=metrics.temperature,
                     cpu_load=metrics.cpu_load,
@@ -186,8 +193,12 @@ class HealthMonitor:
                 self.watchdog_seq
             )
             return True
-        except Exception as e:
-            log.error("Failed to send message: %s", e)
+        except IOError as e:
+            log.error("Failed to send message (IOError): %s", e)
+            self.state_machine.on_disconnect()
+            return False
+        except AttributeError as e:
+            log.error("Failed to send message (AttributeError): %s", e)
             self.state_machine.on_disconnect()
             return False
 

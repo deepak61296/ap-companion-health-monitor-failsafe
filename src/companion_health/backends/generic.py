@@ -44,19 +44,19 @@ class GenericBackend(MetricsBackend):
     def get_cpu_load(self) -> int:
         try:
             return int(psutil.cpu_percent(interval=None))
-        except Exception:
+        except (ValueError, TypeError, psutil.Error):
             return 0
 
     def get_memory_used(self) -> int:
         try:
             return int(psutil.virtual_memory().percent)
-        except Exception:
+        except (ValueError, TypeError, psutil.Error):
             return 0
 
     def get_disk_used(self, path: str = '/') -> int:
         try:
             return int(psutil.disk_usage(path).percent)
-        except Exception:
+        except (ValueError, TypeError, psutil.Error, OSError):
             return 0
 
     def get_temperature(self) -> int:
@@ -88,7 +88,7 @@ class GenericBackend(MetricsBackend):
                 for name, entries in temps.items():
                     if entries:
                         return int(entries[0].current * 10)
-        except Exception:
+        except (ValueError, TypeError, AttributeError, NotImplementedError, psutil.Error):
             pass
 
         if not self._temp_warning_logged:
@@ -111,7 +111,7 @@ class GenericBackend(MetricsBackend):
                 )
                 if result.returncode == 0:
                     return int(result.stdout.strip().split('\n')[0])
-            except Exception:
+            except (ValueError, IndexError, OSError, subprocess.SubprocessError):
                 pass
 
         # Check for Jetson-style GPU load
@@ -120,7 +120,7 @@ class GenericBackend(MetricsBackend):
             try:
                 with open(tegra_path, 'r') as f:
                     return int(f.read().strip()) // 10
-            except Exception:
+            except (IOError, ValueError):
                 pass
 
         return 255
@@ -133,5 +133,5 @@ class GenericBackend(MetricsBackend):
                 capture_output=True, timeout=2
             )
             return result.returncode == 0
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             return False

@@ -1,7 +1,5 @@
 """
 Platform-specific metric collection backends.
-
-AP_FLAKE8_CLEAN
 """
 
 import logging

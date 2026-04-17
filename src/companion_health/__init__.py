@@ -3,8 +3,6 @@ Companion Computer Health Monitor for ArduPilot.
 
 Sends COMPANION_HEALTH MAVLink messages to the flight controller,
 enabling failsafe actions when the companion computer fails.
-
-AP_FLAKE8_CLEAN
 """
 
 from .config import Config
