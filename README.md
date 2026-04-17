@@ -4,111 +4,75 @@ Sends health telemetry from companion computers (RPi, Jetson, etc.) to ArduPilot
 
 **GSoC 2026 Project** | ArduPilot | Mentor: Jaime Machuca
 
+## System Overview
+
+This project provides a robust, cross-platform telemetry pipeline to ensure drones safely handle companion computer failures. 
+
+1. **Flight Controller** (`AP_CompanionHealth` library): Monitors incoming MAVLink heartbeats, validates computer state, and executes strict failsafe handling (RTL, Land, SmartRTL) upon timeouts.
+2. **Companion Daemon**: Cross-platform Python service reading kernel metrics (CPU, RAM, GPU, thermals) and pushing status to ArduPilot at 1Hz.
+
 ## Demo
 
-<a href="https://www.youtube.com/watch?v=s6RZwZTwf14">
-  <img src="https://img.youtube.com/vi/s6RZwZTwf14/0.jpg" alt="Demo Video" width="480">
-</a>
+**[Watch Demo Video](https://www.youtube.com/watch?v=s6RZwZTwf14)** - Demonstrates ArduCopter failsafe triggering when a custom companion computer health script ceases operation.
 
-Click to watch - shows qgc showing companion health messages
+## Latest Updates
+*   **[April 2026] MAVLink Router Decoupling:** Successfully configured and tested `mavlink-router` architecture on SITL to ensure the health monitor script does not monopolize the flight controller's telemetry stream, allowing MAVROS and DroneKit to run concurrently.
 
-## Hardware Tests
+## Development Roadmap
 
-Tested with CubeOrange flight controller:
+### Pre-GSoC Implementation (v0.1)
+*   **MAVLink Protocol**: Local definition of `COMPANION_HEALTH` message.
+*   **FC Message Handling**: `AP_CompanionHealth.cpp` receives and stores metrics.
+*   **FC Failsafe Core**: Strict timeout-based failsafe detection conforming to ArduPilot standards (`events.cpp`).
+*   **Platform Support**: Python foundation with platform metrics for RPi (`vcgencmd`), Jetson (`tegrastats`), and general Linux (`psutil`).
+*   **Hardware Validation**: Tested via USB on Raspberry Pi 4 and Jetson Nano with CubeOrange.
 
-**Raspberry Pi 4**
-![RPi Test](screenshots/test_health_rpi.png)
+### GSoC Timeline & Deliverables
 
-**Jetson Nano**
-![Jetson Test](screenshots/test_health_jetson.png)
+#### Community Bonding (May 1-24): Architecture & Review
+*   Code review with mentor.
+*   Finalize architecture and refactor `AP_CompanionHealth.cpp` based on feedback.
 
-## CURRENT PROGRESS
+#### Week 1-2 (May 25 - Jun 7): Services array & Watchdog loops
+*   **Services**: implement active process discovery in `ServicesMonitor`, add the `CCH_SVC_MASK` parameter, and establish bitwise failing states.
+*   **Watchdog**: Track sequence values in C++ and trigger failsafes to catch frozen OS processes.
+*   **Filtering**: Add moving averages for CPU/Temp metrics, and exponential backoff for reconnection loops.
 
-I have built a working implementation (v0.1) before GSoC that demonstrates end-to-end
-functionality. The FC library receives health messages, tracks state, and triggers failsafe on
-timeout. The companion script collects metrics and sends them over MAVLink. Hardware
-tests on Raspberry Pi 4 and Jetson Nano with Cube Orange confirm the system works on
-real hardware. Demo videos and All Progress will be added to the README of the repository
-given below (Companion Repository).
+#### Week 3-4 (Jun 8-21): Logging & Arming Checks
+*   **Arming**: Query `is_healthy()` inside `AP_Arming.cpp` to block takeoff on disconnected or critical states.
+*   **DataFlash**: Define `LOG_CCH_MSG` in `LogStructure.h` and implement DataFlash routing in `AP_Logger`.
 
-Also here is a demo video of working v0.1
+#### Week 5-6 (Jun 22 - Jul 5): Deployment Tooling & Telemetry Routing
+*   Create `deploy/mavlink-router/usb.conf` to multiplex the FC USB/UART stream across multiple UDP endpoints (ensuring MAVROS, DroneKit, and Health Monitor all run concurrently).
+*   Create `deploy/health_monitor.service` systemd daemon for automatic boot execution.
+*   Create shell installation scripts and Docker compose files for containerized packaging.
 
-During GSoC, everything will be properly reviewed with mentors, refactored based on
-feedback, and tested thoroughly and will discusses about edge cases with mentor.
+#### Midterm (Jul 6-10): Evaluation
+*   Midterm evaluations.
 
-### Repositories
+#### Week 7-8 (Jul 11-19): SITL Testing & CI
+*   Finalize the `CompanionHealthFailsafe` strictly deterministic Python autotests.
+*   Integrate tests into GitHub Actions workflows.
 
-| Repository | Description |
-|------------|-------------|
-| ArduPilot fork | FC library on branch `companion-computer-health-monitor` |
-| Companion Repository | Actual health monitor code that will run on Companion |
+#### Week 9-10 (Jul 20 - Aug 2): Ecosystem Expansion
+*   Register metrics and parameter groups in `ArduPlane/Plane.h` and `Rover/Rover.h`.
+*   Port the `events.cpp` failsafe routing from Copter pattern to Plane and Rover.
 
-### Pre-GSoC Implementation v0.1 (Complete)
+#### Week 11-12 (Aug 3-16): MAVLink Upstream & Documentation
+*   Submit final XML specifications upstream to `mavlink/mavlink`.
+*   Author official ArduPilot wiki pages detailing CCH parameters and architecture.
 
-| Component | Files / Details |
-|-----------|-----------------|
-| MAVLink message (local) | `ardupilotmega.xml` - `COMPANION_HEALTH` message |
-| FC: Message handling | `AP_CompanionHealth.cpp` - receive and store metrics |
-| FC: Timeout failsafe | `AP_CompanionHealth.cpp` - basic timeout detection |
-| FC: Parameters | `CCH_ENABLE`, `CCH_TIMEOUT` in `AP_CompanionHealth.h` |
-| FC: Copter integration | `ArduCopter/Copter.h`, `events.cpp` |
-| FC: GCS messages | Status text via `GCS_SEND_TEXT()` |
-| Companion: Metrics | `health_monitor.py` - CPU, memory, temperature |
-| Companion: Platforms | `platforms/` - RPi, Jetson, Generic backends |
-| Companion: Config | `config.yaml` parsing |
-| Testing: SITL | Basic timeout test |
-| Testing: Hardware | RPi4 + CubeOrange (USB), Jetson + CubeOrange (USB) |
+#### Final (Aug 17-24): Final Evaluation
+*   Code freeze and final reviews.
 
-### GSoC Work (To Do)
+## Future Scope
 
-| Task | Files to Create / Modify |
-|------|--------------------------|
-| review and finalize architecture with mentor | Refactor `AP_CompanionHealth.cpp` based on feedback |
-| `services_status` check | `AP_CompanionHealth.cpp` - add bitmask logic |
-| `CCH_SVC_MASK` parameter | `AP_CompanionHealth.h` - new parameter |
-| Watchdog stall detection | `AP_CompanionHealth.cpp` - compare seq values |
-| DataFlash logging | `AP_Logger/LogStructure.h`, `Write_CCH()` function |
-| Arming check | `AP_Arming.cpp` - optional block if `CCH_ENABLE != 0` and companion state is `DISCONNECTED` or `CRITICAL` |
-| Services monitoring | `health_monitor.py` - `ServicesMonitor` class |
-| Spike filtering | `health_monitor.py` - `collections.deque` filter |
-| Auto-reconnect | `health_monitor.py` - exponential backoff |
-| systemd service | `systemd/health_monitor.service` |
-| Installer script | `setup.sh` |
-| Docker support | `Dockerfile`, `docker-compose.yml` |
-| ArduPlane integration | `ArduPlane/events.cpp`, `Parameters.cpp` |
-| ArduRover integration | `Rover/failsafe.cpp`, `Parameters.cpp` |
-| SITL test suite | `Tools/autotest/test_companion_health.py` |
-| CI integration | GitHub Actions workflow |
-| MAVLink PR | Submit initial MAVLink PR to `mavlink/mavlink` by midterm and iterate based on mentor and community feedback |
-| Wiki documentation | ArduPilot wiki pages |
+Development will continue beyond the official GSoC timeline:
+*   Testing compatibility with previous companion computer GSoC projects.
+*   Implementing hardware backends for Arduino Uno R4 / Ventuno.
+*   Creating a highly-optimized `C++` MAVSDK alternate implementation for extremely resource-constrained SBCs.
 
-### Future Scope
-
-I will continue maintaining this project beyond GSoC and plan to test it with other
-companion computer based previous year GSoC projects in ArduPilot.
-
-Additional platform backends - if i get more newer hardware after GSoC. I will
-continue to add support for newer boards like Arduino Uno Q, Arduino Ventuno Q
-and more upcoming Single Board Computers.
-
-MAVSDK-based implementation - The companion script uses `pymavlink`, which is
-lightweight. For resource-constrained boards, a C++ implementation using MAVSDK
-could offer better performance. This would be a separate implementation, not a
-replacement.
-
-## Timeline
-
-| Period | Dates | Work |
-|--------|-------|------|
-| Community Bonding | May 1-24 | Code review with mentor |
-| Week 1-2 | May 25 - Jun 7 | Services monitoring, watchdog |
-| Week 3-4 | Jun 8-21 | Logging, arming check |
-| Week 5-6 | Jun 22 - Jul 5 | Script improvements |
-| Midterm | Jul 6-10 | Evaluation |
-| Week 7-8 | Jul 11-19 | SITL tests, CI |
-| Week 9-10 | Jul 20 - Aug 2 | Plane/Rover support |
-| Week 11-12 | Aug 3-16 | MAVLink PR, docs |
-| Final | Aug 17-24 | Final evaluation |
+---
 
 ## Quick Start
 
@@ -128,33 +92,9 @@ python -m companion_health --device /dev/ttyACM0 -v
 python -m companion_health --config config/sitl.yaml -v
 ```
 
-## Project Structure
+## Architecture Documentation
 
-```
-companion-health-monitor/
-├── src/companion_health/     # Main package
-│   ├── cli.py                # Command-line interface
-│   ├── monitor.py            # HealthMonitor class
-│   ├── state.py              # State machine
-│   ├── config.py             # Configuration
-│   ├── mavlink.py            # MAVLink constants
-│   ├── backends/             # Platform backends
-│   └── services/             # Services monitoring (GSoC)
-├── tests/                    # Test suite
-│   ├── unit/                 # Fast unit tests
-│   └── integration/          # SITL/hardware tests
-├── config/                   # Example configs
-├── deploy/                   # Docker, systemd
-└── pyproject.toml            # Python packaging
-```
-
-## FC Parameters
-
-- `CCH_ENABLE` - 0=off, 1=RTL, 2=Continue, 3=SmartRTL, 4=SmartRTL/Land, 5=Land
-- `CCH_TIMEOUT` - seconds before failsafe (default 5)
-
-## Message Format
-
+### Message Format
 COMPANION_HEALTH (ID 11061, 13 bytes):
 - `cpu_load`, `memory_used`, `disk_used` - 0-100%
 - `temperature` - decidegrees (450 = 45.0C)
@@ -163,12 +103,9 @@ COMPANION_HEALTH (ID 11061, 13 bytes):
 - `watchdog_seq` - counter to detect stalls
 - `status_flags` - warning flags
 
-## Platforms
-
-Auto-detects and uses optimized backend:
-- **Raspberry Pi** - vcgencmd for temp, throttle detection
-- **Jetson** - tegrastats for GPU, thermal zones
-- **Generic Linux** - psutil + sysfs
+### FC Parameters Configured
+- `CCH_ENABLE` - 0=off, 1=RTL, 2=Continue, 3=SmartRTL, 4=SmartRTL/Land, 5=Land
+- `CCH_TIMEOUT` - seconds without heartbeat before triggering failsafe
 
 ## Development
 
@@ -185,9 +122,8 @@ flake8 src/
 
 ## Related
 
-- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor) - FC library
-- [Demo video](https://www.youtube.com/watch?v=s6RZwZTwf14)
+- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor) - Flight controller system library
+- [Video Demo](https://www.youtube.com/watch?v=s6RZwZTwf14)
 
 ## License
-
 GPLv3
