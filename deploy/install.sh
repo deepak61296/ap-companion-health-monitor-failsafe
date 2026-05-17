@@ -29,9 +29,9 @@ sed "s/COMPANION_USER/$ACTUAL_USER/g" "$SCRIPT_DIR/companion-health.service" > "
 # Reload systemd
 systemctl daemon-reload
 
-# Enable and start service
+# Enable and restart service
 systemctl enable companion-health.service
-systemctl start companion-health.service
+systemctl restart companion-health.service
 
 echo "Service installed and started successfully!"
 echo "Check status with: systemctl status companion-health"

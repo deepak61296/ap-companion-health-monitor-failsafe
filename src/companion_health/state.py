@@ -81,6 +81,11 @@ class StateMachine:
         if new_state == self._state:
             return False
 
+        import logging
+        log = logging.getLogger(__name__)
+        log.info("State transitioned from %s to %s (Reason: %s)", 
+                 self._state.name, new_state.name, reason)
+
         self._last_transition = StateTransition(
             self._state, new_state, time.monotonic(), reason
         )
