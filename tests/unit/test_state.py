@@ -4,7 +4,6 @@ Tests for the state machine.
 AP_FLAKE8_CLEAN
 """
 
-import pytest
 
 from companion_health.state import CompanionState, StateMachine
 

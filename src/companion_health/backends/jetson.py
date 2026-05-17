@@ -4,7 +4,7 @@ NVIDIA Jetson backend with tegrastats integration.
 
 import logging
 import os
-import re
+
 import subprocess
 from typing import Dict, Optional
 

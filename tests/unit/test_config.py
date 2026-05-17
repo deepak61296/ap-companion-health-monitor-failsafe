@@ -7,7 +7,6 @@ AP_FLAKE8_CLEAN
 import os
 import tempfile
 
-import pytest
 
 from companion_health.config import Config, ConnectionConfig, MonitoringConfig
 

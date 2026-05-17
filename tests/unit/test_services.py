@@ -6,8 +6,6 @@ processes, checking their detection, killing them, and verifying the
 bitmask updates accordingly.
 """
 
-import os
-import signal
 import subprocess
 import time
 import unittest

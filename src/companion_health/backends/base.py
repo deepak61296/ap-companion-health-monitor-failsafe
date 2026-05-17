@@ -134,14 +134,14 @@ class MetricsBackend(ABC):
 
         memory = self.get_memory_used()
         disk = self.get_disk_used(disk_path)
-        
+
         raw_temp = self.get_temperature()
         if raw_temp > 0:
             self._temp_history.append(raw_temp)
             temp = int(sum(self._temp_history) / len(self._temp_history))
         else:
             temp = 0
-            
+
         gpu = self.get_gpu_load()
         flags = self.get_status_flags(temp, memory, disk)
 

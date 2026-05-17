@@ -16,12 +16,10 @@ from .backends import MetricsBackend, detect_backend
 from .config import Config
 from .services import ServicesMonitor
 from .mavlink import (
-    COMPANION_HEALTH_CRC_EXTRA,
     MAV_AUTOPILOT_INVALID,
     MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
     MAV_STATE_ACTIVE,
     MAV_TYPE_ONBOARD_CONTROLLER,
-    MAVLINK_MSG_ID_COMPANION_HEALTH,
     send_companion_health_raw,
 )
 from .state import CompanionState, StateMachine

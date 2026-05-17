@@ -4,7 +4,6 @@ Tests for metric collection backends.
 AP_FLAKE8_CLEAN
 """
 
-import pytest
 
 from companion_health.backends.base import HealthMetrics
 from companion_health.backends.generic import GenericBackend
