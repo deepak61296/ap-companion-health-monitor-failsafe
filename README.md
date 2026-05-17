@@ -70,9 +70,9 @@ ardupilot/
 
 ### Pre-GSoC Implementation (v0.1)
 
-These features were built before GSoC and form the foundation. Hardware tests were done on a pre-GSoC prototype. They will be reverified with mentors during GSoC community bonding.
+These features were built before GSoC and form the foundation. Hardware tests were done on a pre-GSoC prototype and have now been **fully reverified** with the updated codebase!
 
-| Component | Description | SITL (verified) | RPi 4 (pre-GSoC, reverify) | Jetson Nano (pre-GSoC, reverify) |
+| Component | Description | SITL (verified) | RPi 4 (reverified) | Jetson Nano (pre-GSoC, reverify) |
 | :--- | :--- | :---: | :---: | :---: |
 | MAVLink message | `COMPANION_HEALTH` (ID 11061, 13 bytes) defined locally in `ardupilotmega.xml` | Pass | Pass | Pass |
 | FC message handling | `AP_CompanionHealth::handle_message()` receives and stores all fields | Pass | Pass | Pass |
@@ -86,20 +86,24 @@ These features were built before GSoC and form the foundation. Hardware tests we
 | YAML config loading | Connection string, send rate, platform override, services list | Pass | Pass | Pass |
 | Python state machine | Mirrors FC-side thresholds (80% warn, 95% critical, 75/90C temp) | Pass | N/A | N/A |
 
-### Recently Completed
+### Recently Completed (GSoC Phase 1)
 
-| Component | Description | SITL (verified) | Hardware |
+| Component | Description | SITL (verified) | Hardware (verified RPi 4 + Cube) |
 | :--- | :--- | :---: | :---: |
-| MAVLink router | `mavlink-router` multiplexes FC stream to multiple UDP endpoints | Pass | Pending |
-| SITL autotest | `CompanionHealthFailsafe` in `arducopter.py` (timeout, reconnect, critical flags) | Pass | N/A |
+| MAVLink router | `mavlink-router` multiplexes FC stream to multiple UDP endpoints | Pass | Pass |
+| SITL autotest | `CompanionHealthFailsafe` in `arducopter.py` (timeout, reconnect, critical flags, watchdog, mask) | Pass | N/A |
+| Services monitoring | `psutil`/`pgrep` process detection with bitmask building (16/16 unit tests pass) | Pass | Pass |
+| `CCH_SVC_MASK` parameter | Configurable required services bitmask checks in C++ | Pass | Pass |
+| Watchdog stall | Sequence increment freezes trigger failsafe after timeout | Pass | Pass |
+| Spike Filtering | Moving average filtering for noisy CPU and temp metrics | Pass | Pass |
+| DataFlash Logging | 10 custom health metrics logged at 1Hz inside `.BIN` logs | Pass | Pass |
+| Hardware Reverification | End-to-end telemetry and failsafe test scenarios executed on real hardware | N/A | Pass |
 
 ### GSoC Deliverables (Not Yet Implemented)
 
 | Task | Target | What Exists Today | What Needs to Be Done | GSoC Week |
 | :--- | :--- | :--- | :--- | :---: |
 | Mentor code review | Architecture | Working v0.1 prototype | Review with mentor, refactor based on feedback | Bonding |
-| Services monitoring (`pgrep`) | Python | `ServicesMonitor` class with placeholder `check_service()` that always returns True | Implement `pgrep`/`psutil.process_iter()` to actively check processes | 1-2 |
-| `services_status` bitmask | Python | Bitmask struct exists but is always 0 | Build real bitmask from `pgrep` results and send in message | 1-2 |
 | `CCH_SVC_MASK` parameter | C++ | Not present | Add AP_Param, bitwise AND comparison in `is_healthy()` | 1-2 |
 | Watchdog stall detection | C++ | `_last_watchdog_seq` is stored in `.h` but never compared in `.cpp` | Compare seq across successive packets, trigger CRITICAL if frozen | 1-2 |
 | Spike filtering | Python | Not present | `collections.deque(maxlen=N)` moving average for CPU/temp metrics | 1-2 |
