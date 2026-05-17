@@ -1,12 +1,13 @@
 [Unit]
-Description=Companion Computer Health Monitor and Telemetry Forwarder
+Description=ArduPilot Companion Health Monitor
 After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/home/deepak/ardupilot/companion_script
-ExecStart=/usr/bin/python3 /home/deepak/ardupilot/companion_script/scripts/health_and_forward.py --device /dev/ttyACM0 --dest udpout:10.221.95.25:14550 --rate 1.0
+# User will be dynamically replaced during install.sh
+User=COMPANION_USER
+Environment="PATH=/home/COMPANION_USER/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/usr/bin/env python3 -u -m companion_health --device /dev/ttyACM0
 Restart=always
 RestartSec=5
 
