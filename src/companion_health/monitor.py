@@ -208,21 +208,60 @@ class HealthMonitor:
         Returns:
             Exit code (0 for success, non-zero for error)
         """
-        if not self.connect():
-            return 1
-
-        interval_s = 1.0 / self.config.monitoring.rate_hz
         self.running = True
+        interval_s = 1.0 / self.config.monitoring.rate_hz
+        log.info("Starting health monitor main loop (rate: %.1f Hz)", self.config.monitoring.rate_hz)
 
-        log.info("Sending COMPANION_HEALTH at %.1f Hz", self.config.monitoring.rate_hz)
+        backoff_s = 1.0
+        max_backoff_s = 30.0
 
         while self.running:
+            if not self.mav:
+                # Try to connect
+                if self.connect():
+                    # Reset backoff on successful connection
+                    backoff_s = 1.0
+                else:
+                    log.warning("Connection attempt failed. Retrying in %.1f seconds...", backoff_s)
+                    # Sleep with checks for self.running
+                    sleep_start = time.monotonic()
+                    while self.running and (time.monotonic() - sleep_start < backoff_s):
+                        time.sleep(0.1)
+                    # Exponential backoff
+                    backoff_s = min(max_backoff_s, backoff_s * 2.0)
+                    continue
+
+            # Connected - pulse health & heartbeat
             start = time.monotonic()
-            self.send_heartbeat()
-            self.send_health()
+            heartbeat_ok = self.send_heartbeat()
+            health_ok = self.send_health()
+
+            # If either failed, mark as disconnected so we trigger reconnection next iteration
+            if not heartbeat_ok or not health_ok:
+                log.error("Telemetry link dropped. Scheduling reconnect...")
+                if self.mav:
+                    try:
+                        self.mav.close()
+                    except Exception:
+                        pass
+                self.mav = None
+                self.state_machine.on_disconnect()
+                # Wait briefly before first reconnect attempt
+                time.sleep(1.0)
+                backoff_s = 1.0
+                continue
+
             elapsed = time.monotonic() - start
             sleep_time = max(0, interval_s - elapsed)
             time.sleep(sleep_time)
+
+        # Cleanup on stop
+        if self.mav:
+            try:
+                self.mav.close()
+            except Exception:
+                pass
+            self.mav = None
 
         log.info("Stopped")
         return 0
