@@ -12,6 +12,7 @@ from ..mavlink import (
     STATUS_FLAG_OVERHEATING,
     STATUS_FLAG_THROTTLED,
 )
+import collections
 
 
 @dataclass
@@ -46,6 +47,8 @@ class MetricsBackend(ABC):
         """
         self.config = config or {}
         self._temp_warning_logged = False
+        self._cpu_history = collections.deque(maxlen=5)
+        self._temp_history = collections.deque(maxlen=5)
 
     @abstractmethod
     def get_cpu_load(self) -> int:
@@ -125,10 +128,20 @@ class MetricsBackend(ABC):
         Returns:
             HealthMetrics dataclass with all metrics
         """
-        cpu = self.get_cpu_load()
+        raw_cpu = self.get_cpu_load()
+        self._cpu_history.append(raw_cpu)
+        cpu = int(sum(self._cpu_history) / len(self._cpu_history))
+
         memory = self.get_memory_used()
         disk = self.get_disk_used(disk_path)
-        temp = self.get_temperature()
+        
+        raw_temp = self.get_temperature()
+        if raw_temp > 0:
+            self._temp_history.append(raw_temp)
+            temp = int(sum(self._temp_history) / len(self._temp_history))
+        else:
+            temp = 0
+            
         gpu = self.get_gpu_load()
         flags = self.get_status_flags(temp, memory, disk)
 
