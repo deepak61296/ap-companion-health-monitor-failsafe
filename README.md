@@ -1,16 +1,46 @@
 # Companion Computer Health Monitor
 
-Monitors the health of companion computers (Raspberry Pi, Jetson Nano, generic Linux) and reports metrics to ArduPilot over MAVLink. The flight controller uses these reports to trigger failsafe actions (RTL, Land, SmartRTL) if the companion stops responding or enters a critical state.
+Monitors the health of companion computers (Raspberry Pi, Jetson, generic Linux) and reports metrics to ArduPilot over MAVLink. The flight controller uses these reports to trigger failsafe actions (RTL, Land, SmartRTL) if the companion stops responding, freezes, or enters a critical state.
 
-**GSoC 2026 Project** | ArduPilot | Mentor: Jaime Machuca
+This started as a prototype for a GSoC 2026 proposal and is now being completed independently as a contribution to the ArduPilot community. The flight-controller side lives in the [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor) (`AP_CompanionHealth` library); this repo is the reference companion-side implementation - any MAVLink-capable software can replace it.
 
 ## Demo
 
 **[Watch Demo Video](https://www.youtube.com/watch?v=s6RZwZTwf14)** - ArduCopter failsafe triggering when the companion health script stops sending messages.
 
-## Latest Updates
+## How it works
 
-*   **[April 2026]** MAVLink Router architecture configured and tested on SITL. The health monitor now connects through `mavlink-router` instead of directly to the serial port, allowing MAVROS, DroneKit, and other apps to run concurrently.
+The companion sends a 13-byte `COMPANION_HEALTH` message at 1 Hz. The FC tracks a state machine (`DISCONNECTED` / `HEALTHY` / `DEGRADED` / `CRITICAL`) and triggers a configurable failsafe on:
+
+- **Timeout** - no message for `CCH_TIMEOUT` seconds
+- **Watchdog stall** - messages still arriving but `watchdog_seq` frozen (companion stuck in a loop)
+- **Service loss** - a process required by the `CCH_SVC_MASK` bitmask stopped running
+- **Critical metrics** - overheating flag, or CPU/memory/temperature past critical thresholds
+
+`DEGRADED` (warning thresholds) only logs and warns; it never triggers a failsafe. An optional pre-arm check blocks arming while the companion is unhealthy.
+
+## Features
+
+- Platform backends with auto-detection: generic Linux (psutil), Raspberry Pi (`vcgencmd` temperature and throttle detection), Jetson (sysfs GPU load and thermal zones)
+- Service monitoring via psutil with `pgrep` fallback, packed into the `services_status` bitmask
+- Spike filtering (moving average) on CPU and temperature to avoid false failsafes
+- Auto-reconnect with exponential backoff
+- Works with stock pymavlink (raw-packet fallback, no rebuilt dialect needed on the companion)
+- YAML config with CLI overrides, systemd service + installer, Dockerfile/compose, mavlink-router configs
+- FC side: `CCH` DataFlash logging at 1 Hz, GCS status text, pre-arm check, 8-subtest SITL autotest (`CompanionHealthFailsafe`)
+
+## Verification status
+
+Honest state of testing evidence, not aspirations:
+
+| Setup | Status |
+| :--- | :--- |
+| SITL (autotest, 8 subtests) | Passing as of May 2026; FC branch is being rebased onto current master, will be re-run after |
+| CubeOrange + Raspberry Pi 4 (USB) | End-to-end verified May 2026 (telemetry, failsafe triggers, systemd) |
+| CubeOrange + Raspberry Pi 4 (UART) | Not yet tested |
+| CubeOrange + Jetson Nano | Pre-GSoC prototype only - reverification with current code pending |
+| Docker deployment | SITL only, not yet on hardware |
+| mavlink-router multi-app | Verified on SITL and RPi 4, May 2026 |
 
 ## Project Structure
 
@@ -23,118 +53,42 @@ companion-health-monitor/
     config.py            # YAML configuration loader
     cli.py               # Command-line argument parsing
     backends/
-      base.py            # Abstract MetricsBackend interface
+      base.py            # Abstract MetricsBackend + spike filtering
       generic.py         # Generic Linux backend (psutil)
       raspberry_pi.py    # RPi backend (vcgencmd for throttle/temp)
-      jetson.py          # Jetson backend (tegrastats for GPU/temp)
+      jetson.py          # Jetson backend (sysfs GPU load, thermal zones)
     services/
-      monitor.py         # ServicesMonitor class (placeholder, pgrep not yet implemented)
-  config/
-    sitl.yaml            # SITL testing config
-    raspberry_pi.yaml    # RPi hardware config
-    jetson.yaml          # Jetson hardware config
+      monitor.py         # ServicesMonitor (psutil/pgrep process detection)
+  config/                # Example configs (sitl, raspberry_pi, jetson)
   deploy/
-    mavlink-router/
-      usb.conf           # Production mavlink-router config (USB)
-    companion-health.service  # systemd unit file (paths need updating)
-    install.sh           # Service installer script
-    Dockerfile           # Docker image (references old file structure)
-    docker-compose.yml   # Docker compose setup
-  scripts/
-    run_sitl_router.sh   # SITL mavlink-router helper
-    build_pymavlink.sh   # pymavlink wheel builder
+    mavlink-router/      # mavlink-router configs
+    companion-health.service  # systemd unit
+    install.sh           # Installer (pip install + service setup)
+    Dockerfile, docker-compose.yml
+  scripts/               # SITL helpers, pymavlink wheel builder
   tests/
-    unit/                # Unit tests for backends, config, state
-    integration/         # Integration tests for SITL and hardware
-  screenshots/
-    test_health_rpi.png  # RPi hardware test screenshot
-    test_health_jetson.png  # Jetson hardware test screenshot
+    unit/                # Backends, config, state, services
+    integration/         # SITL and hardware tests
 ```
 
-ArduPilot fork files (branch: `companion-computer-health-monitor`):
+FC-side files (branch `companion-computer-health-monitor` of the ArduPilot fork):
+
 ```
-ardupilot/
-  libraries/AP_CompanionHealth/
-    AP_CompanionHealth.h       # Library header (State enum, CompanionStatus struct, parameters)
-    AP_CompanionHealth.cpp     # Message handler, timeout detection, GCS reporting
-    AP_CompanionHealth_config.h  # Build enable/disable flag
-  ArduCopter/
-    events.cpp                 # Failsafe routing (RTL/Land/SmartRTL based on CCH_ENABLE)
-    Copter.h                   # g2 parameter group registration
-    Parameters.cpp             # CCH_ENABLE and CCH_TIMEOUT parameter definitions
-  Tools/autotest/
-    arducopter.py              # CompanionHealthFailsafe SITL autotest
+libraries/AP_CompanionHealth/   # Library: message handling, state machine, params, logging
+ArduCopter/events.cpp           # failsafe_companion_check/on_event/off_event (3Hz)
+libraries/AP_Arming/            # Pre-arm health check
+Tools/autotest/arducopter.py    # CompanionHealthFailsafe autotest
+modules/mavlink                 # Submodule pinned to the companion-health branch of
+                                # deepak61296/mavlink (COMPANION_HEALTH message definition)
 ```
-
-## Implementation Progress
-
-### Pre-GSoC Implementation (v0.1)
-
-These features were built before GSoC and form the foundation. Hardware tests were done on a pre-GSoC prototype and have now been **fully reverified** with the updated codebase!
-
-| Component | Description | SITL (verified) | RPi 4 (reverified) | Jetson Nano (pre-GSoC, reverify) |
-| :--- | :--- | :---: | :---: | :---: |
-| MAVLink message | `COMPANION_HEALTH` (ID 11061, 13 bytes) defined locally in `ardupilotmega.xml` | Pass | Pass | Pass |
-| FC message handling | `AP_CompanionHealth::handle_message()` receives and stores all fields | Pass | Pass | Pass |
-| FC timeout failsafe | `update()` sets `DISCONNECTED` when no message for `CCH_TIMEOUT` seconds | Pass | Pass | Pass |
-| FC state machine | `DISCONNECTED` > `HEALTHY` > `DEGRADED` > `CRITICAL` transitions | Pass | Pass | Pass |
-| FC parameters | `CCH_ENABLE` (failsafe action 0-7) and `CCH_TIMEOUT` (seconds, default 5) | Pass | Pass | Pass |
-| FC GCS messages | "Companion computer connected" on first message, periodic report every 10s | Pass | Pass | Pass |
-| Copter failsafe routing | `events.cpp` routes action (RTL/Land/SmartRTL) based on `CCH_ENABLE` value | Pass | Pass | Pass |
-| Python metrics | CPU, memory, disk, temperature, GPU collection via psutil | Pass | Pass | Pass |
-| Platform backends | Generic Linux (psutil), RPi (vcgencmd), Jetson (tegrastats) | Pass | Pass | Pass |
-| YAML config loading | Connection string, send rate, platform override, services list | Pass | Pass | Pass |
-| Python state machine | Mirrors FC-side thresholds (80% warn, 95% critical, 75/90C temp) | Pass | N/A | N/A |
-
-### Recently Completed (GSoC Phase 1)
-
-| Component | Description | SITL (verified) | Hardware (verified RPi 4 + Cube) |
-| :--- | :--- | :---: | :---: |
-| MAVLink router | `mavlink-router` multiplexes FC stream to multiple UDP endpoints | Pass | Pass |
-| SITL autotest | `CompanionHealthFailsafe` in `arducopter.py` (timeout, reconnect, critical flags, watchdog, mask) | Pass | N/A |
-| Services monitoring | `psutil`/`pgrep` process detection with bitmask building (16/16 unit tests pass) | Pass | Pass |
-| `CCH_SVC_MASK` parameter | Configurable required services bitmask checks in C++ | Pass | Pass |
-| Watchdog stall | Sequence increment freezes trigger failsafe after timeout | Pass | Pass |
-| Spike Filtering | Moving average filtering for noisy CPU and temp metrics | Pass | Pass |
-| DataFlash Logging | 10 custom health metrics logged at 1Hz inside `.BIN` logs | Pass | Pass |
-| Hardware Reverification | End-to-end telemetry and failsafe test scenarios executed on real hardware | N/A | Pass |
-
-### GSoC Deliverables (Not Yet Implemented)
-
-| Task | Target | What Exists Today | What Needs to Be Done | GSoC Week |
-| :--- | :--- | :--- | :--- | :---: |
-| Mentor code review | Architecture | Working v0.1 prototype | Review with mentor, refactor based on feedback | Bonding |
-| `CCH_SVC_MASK` parameter | C++ | Not present | Add AP_Param, bitwise AND comparison in `is_healthy()` | 1-2 |
-| Watchdog stall detection | C++ | `_last_watchdog_seq` is stored in `.h` but never compared in `.cpp` | Compare seq across successive packets, trigger CRITICAL if frozen | 1-2 |
-| Spike filtering | Python | Not present | `collections.deque(maxlen=N)` moving average for CPU/temp metrics | 1-2 |
-| Auto-reconnect | Python | Not present | Exponential backoff loop in `monitor.py` when connection drops | 1-2 |
-| DataFlash logging | C++ | Not present | Define `LOG_CCH_MSG` in `LogStructure.h`, implement `Write_CCH()` | 3-4 |
-| Arming check | C++ | Not present | Query `is_healthy()` in `AP_Arming.cpp`, block if DISCONNECTED/CRITICAL | 3-4 |
-| Update systemd service | Deploy | File exists but references old paths (`health_and_forward.py`) | Rewrite to use `python -m companion_health` with correct paths | 5-6 |
-| Update Dockerfile | Deploy | File exists but references old structure (`health_monitor.py`) | Rewrite to match new `src/companion_health` package layout | 5-6 |
-| `mavlink-router` UART config | Deploy | USB config only (`usb.conf`) | Add UART config for production RPi/Jetson deployments | 5-6 |
-| Installer script update | Deploy | `install.sh` exists but depends on outdated service file | Update to install correct paths and dependencies | 5-6 |
-| Expand SITL autotest | Testing | Basic timeout/reconnect/critical test exists | Add tests for services_status, watchdog stall, reconnect stability | 7-8 |
-| CI integration | Testing | Not present | GitHub Actions workflow to run autotests on PR | 7-8 |
-| Test procedure docs | Testing | Not present | Document how to reproduce SITL and hardware tests | 7-8 |
-| Hardware reverification | Testing | Pre-GSoC tests done, screenshots exist | Re-run full suite on RPi 4 and Jetson Nano with updated code | 7-8 |
-| ArduPlane integration | C++ | Not present | Register `AP_CompanionHealth` in `Plane.h`, add failsafe in Plane `events.cpp` | 9-10 |
-| ArduPlane SITL tests | Testing | Not present | Write `CompanionHealthFailsafe` test for ArduPlane autotest | 9-10 |
-| ArduRover integration | C++ | Not present | Register in `Rover.h`, add failsafe in `failsafe.cpp` | 9-10 |
-| ArduRover SITL tests | Testing | Not present | Write `CompanionHealthFailsafe` test for ArduRover autotest | 9-10 |
-| MAVLink upstream PR | Protocol | Local `ardupilotmega.xml` definition only | Submit PR to `mavlink/mavlink`, address community feedback | 11-12 |
-| Regenerate MAVLink headers | Protocol | Not applicable yet | After PR merge, update ArduPilot's MAVLink submodule and regenerate | 11-12 |
-| Wiki documentation | Docs | Not present | Write ArduPilot wiki pages for setup, parameters, troubleshooting | 11-12 |
-| `mavlink-router` wiki guide | Docs | Example config exists | Document multi-app setup with mavlink-router on wiki | 11-12 |
-| Blog post | Docs | Not present | Final ArduPilot blog post summarizing the project | 11-12 |
 
 ## FC Parameters
 
-| Parameter | Type | Default | Status | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| `CCH_ENABLE` | int8 | 0 | Implemented | Failsafe action: 0=Disabled, 1=RTL, 2=Continue, 3=SmartRTL/RTL, 4=SmartRTL/Land, 5=Land |
-| `CCH_TIMEOUT` | float | 5.0 | Implemented | Seconds without messages before failsafe triggers |
-| `CCH_SVC_MASK` | uint32 | 0 | GSoC Week 1-2 | Bitmask of which services are critical (bit N = service N must be running) |
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `CCH_ENABLE` | int8 | 0 | Failsafe action: 0=Disabled, 1=RTL, 2=Continue Mission in Auto, 3=SmartRTL or RTL, 4=SmartRTL or Land, 5=Land, 6=Auto DO_LAND_START or RTL, 7=Brake or Land (same values as GCS failsafe) |
+| `CCH_TIMEOUT` | float | 5.0 | Seconds without messages before failsafe triggers |
+| `CCH_SVC_MASK` | int32 | 0 | Bitmask of required services (bit N = service N from the config list must be running; 0 = ignore) |
 
 ## MAVLink Message Format
 
@@ -170,6 +124,8 @@ python -m companion_health --device /dev/ttyACM0 -v
 python -m companion_health --config config/raspberry_pi.yaml -v
 ```
 
+The flight controller must run the `companion-computer-health-monitor` branch of the ArduPilot fork linked below (the custom message and failsafe are not in upstream ArduPilot yet).
+
 ## Development
 
 ```bash
@@ -183,23 +139,18 @@ pytest tests/unit/ -v
 flake8 src/
 ```
 
-## GSoC Timeline
+## Roadmap
 
-| Phase | Dates | Key Deliverables |
-| :--- | :--- | :--- |
-| Community Bonding | May 1-24 | Code review with mentor, architecture finalization |
-| Week 1-2 | May 25 - Jun 7 | Services monitoring (`pgrep`), watchdog stall detection, spike filtering |
-| Week 3-4 | Jun 8-21 | DataFlash logging, arming checks |
-| Week 5-6 | Jun 22 - Jul 5 | Deployment tooling (systemd, Docker, mavlink-router UART) |
-| Midterm | Jul 6-10 | Midterm evaluation |
-| Week 7-8 | Jul 11-19 | SITL autotest expansion, CI integration |
-| Week 9-10 | Jul 20 - Aug 2 | ArduPlane and ArduRover integration |
-| Week 11-12 | Aug 3-16 | MAVLink upstream PR, wiki documentation |
-| Final | Aug 17-24 | Code freeze and final evaluation |
+1. Rebase the FC branch onto current ArduPilot master and re-run the full autotest
+2. Hardware test matrix: RPi 4 (USB + UART) and Jetson Nano reverification, soak testing
+3. Upstream the `COMPANION_HEALTH` message to ArduPilot/mavlink
+4. Submit the `AP_CompanionHealth` + Copter failsafe PR to ArduPilot
+5. ArduPilot wiki documentation; ArduPlane and ArduRover ports as follow-ups
 
 ## Related
 
-- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor) - Flight controller library
+- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor) - Flight controller library and autotest
+- [MAVLink fork](https://github.com/deepak61296/mavlink/tree/companion-health) - COMPANION_HEALTH message definition
 - [Video Demo](https://www.youtube.com/watch?v=s6RZwZTwf14)
 
 ## License
