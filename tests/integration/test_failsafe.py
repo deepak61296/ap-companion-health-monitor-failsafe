@@ -1,21 +1,43 @@
 #!/usr/bin/env python3
-"""Test that failsafe triggers when companion stops sending."""
+"""Test that failsafe triggers when companion stops sending.
+
+Needs an ArduPilot checkout with a SITL build of the companion-health
+branch, and a pymavlink that includes COMPANION_HEALTH
+(scripts/build_pymavlink.sh). Skipped otherwise, e.g. in CI.
+"""
 
 import os
-import sys
 import time
 import subprocess
+from pathlib import Path
+
+import pytest
 
 os.environ['MAVLINK20'] = '1'
 from pymavlink import mavutil
 
+ARDUPILOT_ROOT = Path(os.environ.get(
+    'CCH_ARDUPILOT_ROOT',
+    Path(__file__).resolve().parents[3] / 'ardupilot'))
+SITL_BINARY = ARDUPILOT_ROOT / 'build' / 'sitl' / 'bin' / 'arducopter'
+COPTER_DEFAULTS = ARDUPILOT_ROOT / 'Tools' / 'autotest' / 'default_params' / 'copter.parm'
+
+pytestmark = [
+    pytest.mark.skipif(
+        not SITL_BINARY.exists(),
+        reason='SITL binary not found, set CCH_ARDUPILOT_ROOT'),
+    pytest.mark.skipif(
+        not hasattr(mavutil.mavlink, 'MAVLINK_MSG_ID_COMPANION_HEALTH'),
+        reason='pymavlink built without COMPANION_HEALTH'),
+]
+
+
 def test_failsafe():
-    sitl_path = "/home/deepak/Documents/ap-companion-health-failsafe/ardupilot/build/sitl/bin/arducopter"
     sitl_cmd = [
-        sitl_path,
+        str(SITL_BINARY),
         "--model", "+",
         "--speedup", "1",
-        "--defaults", "/home/deepak/Documents/ap-companion-health-failsafe/ardupilot/Tools/autotest/default_params/copter.parm",
+        "--defaults", str(COPTER_DEFAULTS),
         "-I0"
     ]
 
@@ -31,12 +53,14 @@ def test_failsafe():
 
         # Set CCH_ENABLE = 1 (RTL)
         print("Setting CCH_ENABLE = 1 (RTL on failsafe)...")
-        mav.mav.param_set_send(mav.target_system, mav.target_component, b'CCH_ENABLE', 1.0, mavutil.mavlink.MAV_PARAM_TYPE_INT8)
+        mav.mav.param_set_send(mav.target_system, mav.target_component,
+                               b'CCH_ENABLE', 1.0, mavutil.mavlink.MAV_PARAM_TYPE_INT8)
         time.sleep(0.5)
 
         # Set CCH_TIMEOUT = 3 seconds
         print("Setting CCH_TIMEOUT = 3...")
-        mav.mav.param_set_send(mav.target_system, mav.target_component, b'CCH_TIMEOUT', 3.0, mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
+        mav.mav.param_set_send(mav.target_system, mav.target_component,
+                               b'CCH_TIMEOUT', 3.0, mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
         time.sleep(0.5)
 
         # Send COMPANION_HEALTH to establish connection
@@ -56,9 +80,7 @@ def test_failsafe():
                 print(f"  Got: {msg.text}")
                 break
 
-        if not connected:
-            print("ERROR: FC didn't confirm connection")
-            return False
+        assert connected, "FC never confirmed companion connection"
 
         # Stop sending - wait for failsafe
         print("Stopping companion messages, waiting for failsafe (timeout=3s)...")
@@ -78,15 +100,12 @@ def test_failsafe():
         if not failsafe_msg:
             print("NOTE: No failsafe message - this is expected when not armed")
             print("      Failsafe only triggers in flight")
-            return True  # Still passes - we confirmed connection works
-
-        return True
 
     finally:
         print("Stopping SITL...")
         sitl.terminate()
         sitl.wait()
 
+
 if __name__ == '__main__':
-    success = test_failsafe()
-    sys.exit(0 if success else 1)
+    test_failsafe()

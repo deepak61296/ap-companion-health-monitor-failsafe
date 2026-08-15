@@ -1,22 +1,44 @@
 #!/usr/bin/env python3
-"""SITL integration test - verifies FC receives COMPANION_HEALTH messages."""
+"""SITL integration test - verifies FC receives COMPANION_HEALTH messages.
+
+Needs an ArduPilot checkout with a SITL build of the companion-health
+branch, and a pymavlink that includes COMPANION_HEALTH
+(scripts/build_pymavlink.sh). Skipped otherwise, e.g. in CI.
+"""
 
 import os
-import sys
 import time
 import subprocess
+from pathlib import Path
+
+import pytest
 
 os.environ['MAVLINK20'] = '1'
 from pymavlink import mavutil
 
+ARDUPILOT_ROOT = Path(os.environ.get(
+    'CCH_ARDUPILOT_ROOT',
+    Path(__file__).resolve().parents[3] / 'ardupilot'))
+SITL_BINARY = ARDUPILOT_ROOT / 'build' / 'sitl' / 'bin' / 'arducopter'
+COPTER_DEFAULTS = ARDUPILOT_ROOT / 'Tools' / 'autotest' / 'default_params' / 'copter.parm'
+
+pytestmark = [
+    pytest.mark.skipif(
+        not SITL_BINARY.exists(),
+        reason='SITL binary not found, set CCH_ARDUPILOT_ROOT'),
+    pytest.mark.skipif(
+        not hasattr(mavutil.mavlink, 'MAVLINK_MSG_ID_COMPANION_HEALTH'),
+        reason='pymavlink built without COMPANION_HEALTH'),
+]
+
+
 def test_sitl():
     # Start SITL
-    sitl_path = "/home/deepak/Documents/ap-companion-health-failsafe/ardupilot/build/sitl/bin/arducopter"
     sitl_cmd = [
-        sitl_path,
+        str(SITL_BINARY),
         "--model", "+",
         "--speedup", "1",
-        "--defaults", "/home/deepak/Documents/ap-companion-health-failsafe/ardupilot/Tools/autotest/default_params/copter.parm",
+        "--defaults", str(COPTER_DEFAULTS),
         "-I0"
     ]
 
@@ -74,16 +96,13 @@ def test_sitl():
                     print("SUCCESS: FC received COMPANION_HEALTH!")
                     break
 
-        if not found:
-            print("WARNING: No 'Companion' STATUSTEXT received (might need CCH_ENABLE set)")
-
-        return found
+        assert found, "FC never acknowledged COMPANION_HEALTH"
 
     finally:
         print("Stopping SITL...")
         sitl.terminate()
         sitl.wait()
 
+
 if __name__ == '__main__':
-    success = test_sitl()
-    sys.exit(0 if success else 1)
+    test_sitl()

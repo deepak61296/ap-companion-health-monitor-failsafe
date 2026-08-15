@@ -1,7 +1,5 @@
 """
 Pytest fixtures for companion health tests.
-
-AP_FLAKE8_CLEAN
 """
 
 import sys
