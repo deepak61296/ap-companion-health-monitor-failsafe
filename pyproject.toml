@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "pymavlink>=2.4.0",
+    "pyserial>=3.5",
     "psutil>=5.0.0",
     "pyyaml>=5.0.0",
 ]
