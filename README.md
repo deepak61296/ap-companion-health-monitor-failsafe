@@ -35,12 +35,28 @@ Honest state of testing evidence, not aspirations:
 
 | Setup | Status |
 | :--- | :--- |
-| SITL (autotest, 8 subtests) | Passing as of May 2026; FC branch is being rebased onto current master, will be re-run after |
-| CubeOrange + Raspberry Pi 4 (USB) | End-to-end verified May 2026 (telemetry, failsafe triggers, systemd) |
-| CubeOrange + Raspberry Pi 4 (UART) | Not yet tested |
-| CubeOrange + Jetson Nano | Pre-GSoC prototype only - reverification with current code pending |
-| Docker deployment | SITL only, not yet on hardware |
-| mavlink-router multi-app | Verified on SITL and RPi 4, May 2026 |
+| SITL (autotest, 11 subtests) | Passing on current ArduPilot master, August 2026, with `allow_skips=False` |
+| Unit suite | 66 passed / 2 skipped; CI on Python 3.10-3.12, also verified on 3.13 |
+| CubeOrange + Raspberry Pi 4 (USB) | End-to-end verified August 2026: pre-arm gate, failsafe at exactly `CCH_TIMEOUT`, recovery, all as a real systemd service |
+| 1-hour stress soak on RPi 4 | Passed August 2026: memory flat, zero restarts, no spurious failsafes under staged CPU and memory load |
+| mavlink-router multi-app | Verified on real hardware August 2026: companion, a network GCS and a TCP client sharing one flight controller link |
+| Dataflash `CCH` logging | Verified in a real `.BIN` pulled off a CubeOrange, August 2026 |
+| CubeOrange + Raspberry Pi 4 (UART) | **Not yet tested** - planned. The message layer is transport-agnostic, but the GPIO serial path has not been exercised |
+| CubeOrange + Jetson | **On hold.** The backend and its unit tests exist, but the last on-device run predates the current code. Reverification will come later |
+| Docker deployment | Optional path, SITL only, not yet on hardware |
+
+## Platform support
+
+Three backends, auto-detected at startup:
+
+| Backend | Status |
+| :--- | :--- |
+| Raspberry Pi (`vcgencmd` temperature and throttle detection) | Primary, verified on hardware |
+| Generic Linux (`psutil`, sysfs thermal zones) | Primary, the portable fallback for any Linux companion |
+| Jetson (sysfs GPU load and thermal zones) | On hold - code and unit tests exist, on-device reverification pending |
+
+Docker is a deployment option rather than a backend; inside a container the generic Linux
+backend is what runs.
 
 ## Project Structure
 
@@ -95,7 +111,7 @@ modules/mavlink                 # Submodule pinned to the companion-health branc
 `COMPANION_HEALTH` (ID 11061, 13 bytes):
 - `services_status` (uint32) - bitmask of running services
 - `watchdog_seq` (uint16) - incrementing counter to detect stalls
-- `temperature` (int16) - decidegrees Celsius (450 = 45.0C)
+- `temperature` (int16) - centidegrees Celsius (4500 = 45.0C), INT16_MAX if no sensor
 - `cpu_load` (uint8) - 0-100%
 - `memory_used` (uint8) - 0-100%
 - `disk_used` (uint8) - 0-100%
@@ -141,16 +157,16 @@ flake8 src/
 
 ## Roadmap
 
-1. Rebase the FC branch onto current ArduPilot master and re-run the full autotest
-2. Hardware test matrix: RPi 4 (USB + UART) and Jetson Nano reverification, soak testing
-3. Upstream the `COMPANION_HEALTH` message to ArduPilot/mavlink
-4. Submit the `AP_CompanionHealth` + Copter failsafe PR to ArduPilot
+1. Upstream the `COMPANION_HEALTH` message to ArduPilot/mavlink
+2. Submit the `AP_CompanionHealth` + Copter failsafe PR to ArduPilot
+3. UART (GPIO serial) between companion and flight controller - USB is verified, UART is not
+4. Jetson reverification on current code
 5. ArduPilot wiki documentation; ArduPlane and ArduRover ports as follow-ups
 
 ## Related
 
-- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor) - Flight controller library and autotest
-- [MAVLink fork](https://github.com/deepak61296/mavlink/tree/companion-health) - COMPANION_HEALTH message definition
+- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-health) - Flight controller library and autotest
+- [MAVLink fork](https://github.com/deepak61296/mavlink/tree/companion-health-master) - COMPANION_HEALTH message definition
 - [Video Demo](https://www.youtube.com/watch?v=s6RZwZTwf14)
 
 ## License
