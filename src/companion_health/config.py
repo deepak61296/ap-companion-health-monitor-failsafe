@@ -101,6 +101,22 @@ class Config:
 
         return cls.from_dict(data)
 
+    @staticmethod
+    def _merge_section(name: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge a config section over its defaults, dropping unknown keys.
+
+        Older config files use key names that have since been renamed, so an
+        unrecognised key warns rather than killing the daemon at startup.
+        """
+        defaults = DEFAULTS[name]
+        merged = dict(defaults)
+        for key, value in data.get(name, {}).items():
+            if key in defaults:
+                merged[key] = value
+            else:
+                log.warning("Ignoring unknown '%s' config key: %s", name, key)
+        return merged
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Config':
         """Create Config from dictionary.
@@ -111,9 +127,9 @@ class Config:
         Returns:
             Config instance
         """
-        conn_data = {**DEFAULTS['connection'], **data.get('connection', {})}
-        mon_data = {**DEFAULTS['monitoring'], **data.get('monitoring', {})}
-        thresh_data = {**DEFAULTS['thresholds'], **data.get('thresholds', {})}
+        conn_data = cls._merge_section('connection', data)
+        mon_data = cls._merge_section('monitoring', data)
+        thresh_data = cls._merge_section('thresholds', data)
 
         return cls(
             connection=ConnectionConfig(**conn_data),
