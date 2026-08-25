@@ -1,10 +1,9 @@
 """
 Tests for the state machine.
-
-AP_FLAKE8_CLEAN
 """
 
 
+from companion_health.mavlink import TEMPERATURE_UNKNOWN
 from companion_health.state import CompanionState, StateMachine
 
 
@@ -45,55 +44,55 @@ class TestStateMachine:
     def test_health_update_healthy(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=450)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=4500)
         assert sm.state == CompanionState.HEALTHY
 
     def test_health_update_degraded_cpu(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu_pct=85, memory_pct=40, temp_cdeg=450)
+        sm.update_health(status_flags=0, cpu_pct=85, memory_pct=40, temp_cdeg=4500)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_degraded_memory(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=85, temp_cdeg=450)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=85, temp_cdeg=4500)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_degraded_temp(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=780)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=7800)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_degraded_flags(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0x01, cpu_pct=30, memory_pct=40, temp_cdeg=450)
+        sm.update_health(status_flags=0x01, cpu_pct=30, memory_pct=40, temp_cdeg=4500)
         assert sm.state == CompanionState.DEGRADED
 
     def test_health_update_critical_cpu(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu_pct=98, memory_pct=40, temp_cdeg=450)
+        sm.update_health(status_flags=0, cpu_pct=98, memory_pct=40, temp_cdeg=4500)
         assert sm.state == CompanionState.CRITICAL
 
     def test_health_update_critical_temp(self):
         sm = StateMachine()
         sm.on_connect_success()
-        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=920)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=9200)
         assert sm.state == CompanionState.CRITICAL
 
     def test_health_update_critical_flag(self):
         sm = StateMachine()
         sm.on_connect_success()
         # 0x02 = STATUS_FLAG_OVERHEATING
-        sm.update_health(status_flags=0x02, cpu_pct=30, memory_pct=40, temp_cdeg=450)
+        sm.update_health(status_flags=0x02, cpu_pct=30, memory_pct=40, temp_cdeg=4500)
         assert sm.state == CompanionState.CRITICAL
 
     def test_health_update_requires_connection(self):
         sm = StateMachine()
-        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=450)
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=4500)
         assert sm.state == CompanionState.DISCONNECTED
 
     def test_transition_returns_false_for_same_state(self):
@@ -119,3 +118,27 @@ class TestStateMachine:
         assert sm.last_transition is not None
         assert sm.last_transition.from_state == CompanionState.DISCONNECTED
         assert sm.last_transition.to_state == CompanionState.HEALTHY
+
+
+class TestUnknownTemperature:
+    """An absent temperature sensor must not look like an overheat."""
+
+    def test_unknown_temperature_stays_healthy(self):
+        sm = StateMachine()
+        sm.on_connect_success()
+        sm.update_health(
+            status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=TEMPERATURE_UNKNOWN
+        )
+        assert sm.state == CompanionState.HEALTHY
+
+    def test_real_overheat_still_critical(self):
+        sm = StateMachine()
+        sm.on_connect_success()
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=9500)
+        assert sm.state == CompanionState.CRITICAL
+
+    def test_freezing_temperature_is_healthy(self):
+        sm = StateMachine()
+        sm.on_connect_success()
+        sm.update_health(status_flags=0, cpu_pct=30, memory_pct=40, temp_cdeg=-500)
+        assert sm.state == CompanionState.HEALTHY

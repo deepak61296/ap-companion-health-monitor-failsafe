@@ -9,7 +9,7 @@ from typing import Optional
 
 import psutil
 
-from .base import MetricsBackend
+from .base import MetricsBackend, TEMPERATURE_UNKNOWN
 
 log = logging.getLogger(__name__)
 
@@ -91,21 +91,21 @@ class RaspberryPiBackend(MetricsBackend):
             # Output format: "temp=45.0'C"
             try:
                 temp_str = output.split('=')[1].replace("'C", "")
-                return int(float(temp_str) * 10)
+                return int(float(temp_str) * 100)
             except (IndexError, ValueError):
                 pass
 
         # Fallback to sysfs
         try:
             with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
-                return int(f.read().strip()) // 100
+                return int(f.read().strip()) // 10
         except (IOError, ValueError):
             pass
 
         if not self._temp_warning_logged:
             log.warning("No temperature sensor found")
             self._temp_warning_logged = True
-        return 0
+        return TEMPERATURE_UNKNOWN
 
     def get_gpu_load(self) -> int:
         """Pi doesn't have a separate GPU load metric."""

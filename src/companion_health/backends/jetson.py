@@ -10,7 +10,7 @@ from typing import Dict, Optional
 
 import psutil
 
-from .base import MetricsBackend
+from .base import MetricsBackend, TEMPERATURE_UNKNOWN
 
 log = logging.getLogger(__name__)
 
@@ -124,28 +124,28 @@ class JetsonBackend(MetricsBackend):
                 with open(self._temp_path, 'r') as f:
                     # Value is in millidegrees
                     temp_milli = int(f.read().strip())
-                    return temp_milli // 100  # Convert to decidegrees
+                    return temp_milli // 10  # Convert to centidegrees
             except (IOError, ValueError):
                 pass
 
         # Fallback: try all thermal zones and take highest
-        max_temp = 0
+        max_temp = None
         for path in JETSON_THERMAL_ZONES:
             if os.path.exists(path):
                 try:
                     with open(path, 'r') as f:
-                        temp = int(f.read().strip()) // 100
-                        max_temp = max(max_temp, temp)
+                        temp = int(f.read().strip()) // 10
+                        max_temp = temp if max_temp is None else max(max_temp, temp)
                 except (IOError, ValueError):
                     continue
 
-        if max_temp > 0:
+        if max_temp is not None:
             return max_temp
 
         if not self._temp_warning_logged:
             log.warning("No temperature sensor found")
             self._temp_warning_logged = True
-        return 0
+        return TEMPERATURE_UNKNOWN
 
     def get_gpu_load(self) -> int:
         """Get GPU load from sysfs."""

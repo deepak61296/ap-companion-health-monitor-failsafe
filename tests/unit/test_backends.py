@@ -1,17 +1,17 @@
 """
 Tests for metric collection backends.
-
-AP_FLAKE8_CLEAN
 """
 
 
 from companion_health.backends.base import HealthMetrics
+from companion_health.backends import generic
 from companion_health.backends.generic import GenericBackend
 from companion_health.mavlink import (
     STATUS_FLAG_LOW_DISK,
     STATUS_FLAG_LOW_MEMORY,
     STATUS_FLAG_OVERHEATING,
     STATUS_FLAG_THROTTLED,
+    TEMPERATURE_UNKNOWN,
 )
 
 
@@ -24,14 +24,14 @@ class TestHealthMetrics:
             cpu_load=50,
             memory_used=60,
             disk_used=70,
-            temperature=450,
+            temperature=4500,
             gpu_load=255,
             status_flags=0
         )
         assert m.cpu_load == 50
         assert m.memory_used == 60
         assert m.disk_used == 70
-        assert m.temperature == 450
+        assert m.temperature == 4500
         assert m.gpu_load == 255
         assert m.status_flags == 0
 
@@ -106,29 +106,86 @@ class TestGenericBackend:
     def test_status_flags_throttled(self):
         """High temperature sets throttled flag."""
         backend = GenericBackend({'thresholds': {'temp_throttle': 80.0}})
-        flags = backend.get_status_flags(temp_cdeg=850, memory_pct=50, disk_pct=50)
+        flags = backend.get_status_flags(temp_cdeg=8500, memory_pct=50, disk_pct=50)
         assert flags & STATUS_FLAG_THROTTLED
 
     def test_status_flags_overheating(self):
         """Very high temperature sets overheating flag."""
         backend = GenericBackend({'thresholds': {'temp_overheat': 85.0}})
-        flags = backend.get_status_flags(temp_cdeg=900, memory_pct=50, disk_pct=50)
+        flags = backend.get_status_flags(temp_cdeg=9000, memory_pct=50, disk_pct=50)
         assert flags & STATUS_FLAG_OVERHEATING
 
     def test_status_flags_low_memory(self):
         """High memory usage sets low memory flag."""
         backend = GenericBackend({'thresholds': {'memory_low': 90}})
-        flags = backend.get_status_flags(temp_cdeg=450, memory_pct=95, disk_pct=50)
+        flags = backend.get_status_flags(temp_cdeg=4500, memory_pct=95, disk_pct=50)
         assert flags & STATUS_FLAG_LOW_MEMORY
 
     def test_status_flags_low_disk(self):
         """High disk usage sets low disk flag."""
         backend = GenericBackend({'thresholds': {'disk_low': 95}})
-        flags = backend.get_status_flags(temp_cdeg=450, memory_pct=50, disk_pct=98)
+        flags = backend.get_status_flags(temp_cdeg=4500, memory_pct=50, disk_pct=98)
         assert flags & STATUS_FLAG_LOW_DISK
 
     def test_status_flags_normal(self):
         """Normal metrics return no flags."""
         backend = GenericBackend()
-        flags = backend.get_status_flags(temp_cdeg=450, memory_pct=50, disk_pct=50)
+        flags = backend.get_status_flags(temp_cdeg=4500, memory_pct=50, disk_pct=50)
         assert flags == 0
+
+
+class TestTemperatureUnits:
+    """Pin the wire unit: sysfs millidegrees must become centidegrees."""
+
+    def test_sysfs_path_converts_millidegrees(self, tmp_path, monkeypatch):
+        """A discovered sysfs sensor reading 45000 (45.0C) reports 4500."""
+        sensor = tmp_path / "temp"
+        sensor.write_text("45000\n")
+        monkeypatch.setattr(generic, "TEMP_SENSOR_PATHS", [str(sensor)])
+        backend = GenericBackend()
+        assert backend.get_temperature() == 4500
+
+    def test_cached_path_matches_discovery_path(self, tmp_path, monkeypatch):
+        """The cached read returns the same value as the discovery read."""
+        sensor = tmp_path / "temp"
+        sensor.write_text("45000\n")
+        monkeypatch.setattr(generic, "TEMP_SENSOR_PATHS", [str(sensor)])
+        backend = GenericBackend()
+        first = backend.get_temperature()
+        second = backend.get_temperature()
+        assert first == second == 4500
+
+    def test_overheat_temperature_crosses_fc_threshold(self, tmp_path, monkeypatch):
+        """90C must report above the flight controller's 9000 cdegC limit."""
+        sensor = tmp_path / "temp"
+        sensor.write_text("90000\n")
+        monkeypatch.setattr(generic, "TEMP_SENSOR_PATHS", [str(sensor)])
+        backend = GenericBackend()
+        assert backend.get_temperature() == 9000
+
+    def test_missing_sensor_reports_unknown(self, monkeypatch):
+        """No sensor anywhere reports the invalid sentinel, not zero."""
+        monkeypatch.setattr(generic, "TEMP_SENSOR_PATHS", ["/nonexistent/temp"])
+        monkeypatch.setattr(generic.psutil, "sensors_temperatures", lambda: {})
+        backend = GenericBackend()
+        assert backend.get_temperature() == TEMPERATURE_UNKNOWN
+
+    def test_freezing_temperatures_survive(self, tmp_path, monkeypatch):
+        """0C and sub-zero readings are real values, not 'unknown'."""
+        sensor = tmp_path / "temp"
+        monkeypatch.setattr(generic, "TEMP_SENSOR_PATHS", [str(sensor)])
+        for milli, expected in ((0, 0), (-5000, -500)):
+            sensor.write_text(f"{milli}\n")
+            backend = GenericBackend()
+            metrics = backend.collect_all("/")
+            assert backend.get_temperature() == expected
+            assert metrics.temperature != TEMPERATURE_UNKNOWN
+
+    def test_unknown_temperature_sets_no_heat_flags(self):
+        """The sentinel must not read as an overheat."""
+        backend = GenericBackend()
+        flags = backend.get_status_flags(
+            temp_cdeg=TEMPERATURE_UNKNOWN, memory_pct=50, disk_pct=50
+        )
+        assert not flags & STATUS_FLAG_OVERHEATING
+        assert not flags & STATUS_FLAG_THROTTLED

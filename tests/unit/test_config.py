@@ -1,7 +1,5 @@
 """
 Tests for configuration handling.
-
-AP_FLAKE8_CLEAN
 """
 
 import os

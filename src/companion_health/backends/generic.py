@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import psutil
 
-from .base import MetricsBackend
+from .base import MetricsBackend, TEMPERATURE_UNKNOWN
 
 log = logging.getLogger(__name__)
 
@@ -60,13 +60,13 @@ class GenericBackend(MetricsBackend):
             return 0
 
     def get_temperature(self) -> int:
-        """Return temperature in decidegrees (celsius * 10)."""
+        """Return temperature in centidegrees (celsius * 100)."""
         # Try cached sensor path first
         if self._temp_sensor_path:
             try:
                 with open(self._temp_sensor_path, 'r') as f:
                     temp_milli = int(f.read().strip())
-                    return temp_milli // 100
+                    return temp_milli // 10
             except (IOError, ValueError):
                 self._temp_sensor_path = None
 
@@ -77,7 +77,7 @@ class GenericBackend(MetricsBackend):
                     with open(path, 'r') as f:
                         temp_milli = int(f.read().strip())
                         self._temp_sensor_path = path
-                        return temp_milli // 100
+                        return temp_milli // 10
                 except (IOError, ValueError):
                     continue
 
@@ -87,14 +87,14 @@ class GenericBackend(MetricsBackend):
             if temps:
                 for name, entries in temps.items():
                     if entries:
-                        return int(entries[0].current * 10)
+                        return int(entries[0].current * 100)
         except (ValueError, TypeError, AttributeError, NotImplementedError, psutil.Error):
             pass
 
         if not self._temp_warning_logged:
-            log.warning("No temperature sensor found, reporting 0")
+            log.warning("No temperature sensor found, reporting unknown")
             self._temp_warning_logged = True
-        return 0
+        return TEMPERATURE_UNKNOWN
 
     def get_gpu_load(self) -> int:
         """Return GPU load, or 255 if unavailable."""

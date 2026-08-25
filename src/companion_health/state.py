@@ -2,12 +2,15 @@
 State machine for companion health tracking.
 """
 
+import logging
 import time
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
-from .mavlink import STATUS_FLAG_OVERHEATING
+from .mavlink import STATUS_FLAG_OVERHEATING, TEMPERATURE_UNKNOWN
+
+log = logging.getLogger(__name__)
 
 
 class CompanionState(IntEnum):
@@ -35,8 +38,8 @@ class StateMachine:
     CPU_CRIT_PCT = 95
     MEM_WARN_PCT = 80
     MEM_CRIT_PCT = 95
-    TEMP_WARN_CDEG = 750   # 75.0C
-    TEMP_CRIT_CDEG = 900   # 90.0C
+    TEMP_WARN_CDEG = 7500   # 75.0C
+    TEMP_CRIT_CDEG = 9000   # 90.0C
 
     def __init__(self) -> None:
         self._state = CompanionState.DISCONNECTED
@@ -81,8 +84,6 @@ class StateMachine:
         if new_state == self._state:
             return False
 
-        import logging
-        log = logging.getLogger(__name__)
         log.info("State transitioned from %s to %s (Reason: %s)",
                  self._state.name, new_state.name, reason)
 
@@ -114,17 +115,20 @@ class StateMachine:
             status_flags: Bitmask of warning flags
             cpu_pct: CPU usage 0-100%
             memory_pct: Memory usage 0-100%
-            temp_cdeg: Temperature in decidegrees (450 = 45.0C)
+            temp_cdeg: Temperature in centidegrees (4500 = 45.0C)
         """
         if not self.is_connected:
             return
+
+        # an unknown temperature is not evidence of a problem, matching the FC
+        temp_valid = temp_cdeg != TEMPERATURE_UNKNOWN
 
         # Critical: overheating flag, or any metric > 95%
         is_critical = (
             (status_flags & STATUS_FLAG_OVERHEATING) != 0
             or cpu_pct > self.CPU_CRIT_PCT
             or memory_pct > self.MEM_CRIT_PCT
-            or temp_cdeg > self.TEMP_CRIT_CDEG
+            or (temp_valid and temp_cdeg > self.TEMP_CRIT_CDEG)
         )
 
         # Degraded: any warning flag, or metrics > 80%
@@ -132,7 +136,7 @@ class StateMachine:
             (status_flags & 0x0F) != 0
             or cpu_pct > self.CPU_WARN_PCT
             or memory_pct > self.MEM_WARN_PCT
-            or temp_cdeg > self.TEMP_WARN_CDEG
+            or (temp_valid and temp_cdeg > self.TEMP_WARN_CDEG)
         )
 
         if is_critical:

@@ -6,13 +6,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+import collections
+
 from ..mavlink import (
     STATUS_FLAG_LOW_DISK,
     STATUS_FLAG_LOW_MEMORY,
     STATUS_FLAG_OVERHEATING,
     STATUS_FLAG_THROTTLED,
+    TEMPERATURE_UNKNOWN,
 )
-import collections
 
 
 @dataclass
@@ -21,7 +23,7 @@ class HealthMetrics:
     cpu_load: int           # 0-100%
     memory_used: int        # 0-100%
     disk_used: int          # 0-100%
-    temperature: int        # Celsius * 10 (e.g., 450 = 45.0C)
+    temperature: int        # Celsius * 100 (e.g., 4500 = 45.0C), TEMPERATURE_UNKNOWN if unavailable
     gpu_load: int           # 0-100%, or 255 if unavailable
     status_flags: int       # Bitmask of status flags
 
@@ -67,9 +69,9 @@ class MetricsBackend(ABC):
 
     @abstractmethod
     def get_temperature(self) -> int:
-        """Return board temperature in decidegrees (celsius * 10).
+        """Return board temperature in centidegrees (celsius * 100).
 
-        Returns 0 if temperature sensor unavailable.
+        Returns TEMPERATURE_UNKNOWN if no temperature sensor is available.
         """
         ...
 
@@ -92,7 +94,7 @@ class MetricsBackend(ABC):
         """Calculate status flags based on current metrics.
 
         Args:
-            temp_cdeg: Temperature in decidegrees (celsius * 10)
+            temp_cdeg: Temperature in centidegrees (celsius * 100)
             memory_pct: Memory usage percentage
             disk_pct: Disk usage percentage
 
@@ -106,12 +108,14 @@ class MetricsBackend(ABC):
         disk_low = thresholds.get('disk_low', self.DEFAULT_DISK_LOW_PCT)
 
         flags = 0
-        temp_c = temp_cdeg / 10.0
 
-        if temp_c > temp_throttle:
-            flags |= STATUS_FLAG_THROTTLED
-        if temp_c > temp_overheat:
-            flags |= STATUS_FLAG_OVERHEATING
+        # an unknown temperature must not look like an overheat
+        if temp_cdeg != TEMPERATURE_UNKNOWN:
+            temp_c = temp_cdeg / 100.0
+            if temp_c > temp_throttle:
+                flags |= STATUS_FLAG_THROTTLED
+            if temp_c > temp_overheat:
+                flags |= STATUS_FLAG_OVERHEATING
         if memory_pct > memory_low:
             flags |= STATUS_FLAG_LOW_MEMORY
         if disk_pct > disk_low:
@@ -136,11 +140,13 @@ class MetricsBackend(ABC):
         disk = self.get_disk_used(disk_path)
 
         raw_temp = self.get_temperature()
-        if raw_temp > 0:
+        if raw_temp != TEMPERATURE_UNKNOWN:
             self._temp_history.append(raw_temp)
             temp = int(sum(self._temp_history) / len(self._temp_history))
         else:
-            temp = 0
+            # drop stale samples so a recovered sensor is not averaged with them
+            self._temp_history.clear()
+            temp = TEMPERATURE_UNKNOWN
 
         gpu = self.get_gpu_load()
         flags = self.get_status_flags(temp, memory, disk)

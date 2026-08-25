@@ -4,6 +4,7 @@ Main health monitor implementation.
 
 import logging
 import os
+import struct
 import time
 from typing import Optional
 
@@ -20,6 +21,9 @@ from .mavlink import (
     MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
     MAV_STATE_ACTIVE,
     MAV_TYPE_ONBOARD_CONTROLLER,
+    TEMPERATURE_MAX,
+    TEMPERATURE_MIN,
+    TEMPERATURE_UNKNOWN,
     send_companion_health_raw,
 )
 from .state import CompanionState, StateMachine
@@ -152,13 +156,18 @@ class HealthMonitor:
 
         services_status = self.services_monitor.get_status()
 
+        # clamp so a misreporting sensor cannot overflow the int16 field
+        temperature = metrics.temperature
+        if temperature != TEMPERATURE_UNKNOWN:
+            temperature = max(TEMPERATURE_MIN, min(TEMPERATURE_MAX, temperature))
+
         try:
             # Try native method first, fall back to raw packet
             if hasattr(self.mav.mav, 'companion_health_send'):
                 self.mav.mav.companion_health_send(
                     services_status=services_status,
                     watchdog_seq=self.watchdog_seq,
-                    temperature=metrics.temperature,
+                    temperature=temperature,
                     cpu_load=metrics.cpu_load,
                     memory_used=metrics.memory_used,
                     disk_used=metrics.disk_used,
@@ -170,7 +179,7 @@ class HealthMonitor:
                     self.mav,
                     services_status=services_status,
                     watchdog_seq=self.watchdog_seq,
-                    temperature=metrics.temperature,
+                    temperature=temperature,
                     cpu_load=metrics.cpu_load,
                     memory_used=metrics.memory_used,
                     disk_used=metrics.disk_used,
@@ -185,7 +194,7 @@ class HealthMonitor:
                 metrics.cpu_load,
                 metrics.memory_used,
                 metrics.disk_used,
-                metrics.temperature / 10.0,
+                temperature / 100.0,
                 'N/A' if metrics.gpu_load == 255 else f'{metrics.gpu_load}%',
                 metrics.status_flags,
                 self.watchdog_seq
@@ -198,6 +207,10 @@ class HealthMonitor:
         except AttributeError as e:
             log.error("Failed to send message (AttributeError): %s", e)
             self.state_machine.on_disconnect()
+            return False
+        except struct.error as e:
+            # a metric outside its field range would otherwise kill the loop
+            log.error("Failed to pack message: %s", e)
             return False
 
     def run(self) -> int:
@@ -240,8 +253,8 @@ class HealthMonitor:
                 if self.mav:
                     try:
                         self.mav.close()
-                    except Exception:
-                        pass
+                    except (IOError, OSError) as e:
+                        log.debug("Error closing link: %s", e)
                 self.mav = None
                 self.state_machine.on_disconnect()
                 # Wait briefly before first reconnect attempt
@@ -257,8 +270,8 @@ class HealthMonitor:
         if self.mav:
             try:
                 self.mav.close()
-            except Exception:
-                pass
+            except (IOError, OSError) as e:
+                log.debug("Error closing link: %s", e)
             self.mav = None
 
         log.info("Stopped")

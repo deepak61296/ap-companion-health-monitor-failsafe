@@ -73,7 +73,7 @@ def test_sitl():
             mav.mav.companion_health_send(
                 services_status=0,
                 watchdog_seq=i,
-                temperature=450,
+                temperature=4500,
                 cpu_load=25,
                 memory_used=30,
                 disk_used=50,

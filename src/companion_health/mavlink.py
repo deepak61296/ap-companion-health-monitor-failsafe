@@ -12,6 +12,11 @@ if TYPE_CHECKING:
 MAVLINK_MSG_ID_COMPANION_HEALTH = 11061
 COMPANION_HEALTH_CRC_EXTRA = 81
 
+# temperature is cdegC in an int16; INT16_MAX is the message's invalid value
+TEMPERATURE_UNKNOWN = 32767
+TEMPERATURE_MIN = -32768
+TEMPERATURE_MAX = 32766
+
 # MAVLink component identifiers
 MAV_TYPE_ONBOARD_CONTROLLER = 18
 MAV_COMP_ID_ONBOARD_COMPUTER = 191
@@ -45,7 +50,7 @@ def send_companion_health_raw(
         mav: MAVLink connection from mavutil
         services_status: 32-bit bitmask of running services
         watchdog_seq: Stall detection counter (0-65535)
-        temperature: Board temp in decidegrees (450 = 45.0C)
+        temperature: Board temp in centidegrees (4500 = 45.0C), INT16_MAX if unknown
         cpu_load: CPU usage 0-100%
         memory_used: RAM usage 0-100%
         disk_used: Disk usage 0-100%

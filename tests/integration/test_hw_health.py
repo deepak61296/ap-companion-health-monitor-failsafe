@@ -44,7 +44,7 @@ def main():
     print(f"CPU Load:    {metrics.cpu_load}%")
     print(f"Memory Used: {metrics.memory_used}%")
     print(f"Disk Used:   {metrics.disk_used}%")
-    print(f"Temperature: {metrics.temperature / 10.0:.1f}C")
+    print(f"Temperature: {metrics.temperature / 100.0:.1f}C")
     print(f"GPU Load:    {'N/A' if metrics.gpu_load == 255 else f'{metrics.gpu_load}%'}")
     print(f"Flags:       0x{metrics.status_flags:02X}")
 
@@ -75,7 +75,7 @@ def main():
             if monitor.send_health():
                 count += 1
                 m = backend.collect_all()
-                print(f"[{count:3d}] CPU={m.cpu_load:2d}% Mem={m.memory_used:2d}% Temp={m.temperature/10:.1f}C")
+                print(f"[{count:3d}] CPU={m.cpu_load:2d}% Mem={m.memory_used:2d}% Temp={m.temperature/100:.1f}C")
             time.sleep(1.0)
 
         print("\n" + "=" * 60)
