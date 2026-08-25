@@ -32,16 +32,16 @@ monitoring:
 # Thresholds for status flags
 thresholds:
   # Temperature in Celsius at which to set FLAG_THROTTLED
-  temp_throttle: 80.0
+  temp_throttle_c: 80.0
 
   # Temperature in Celsius at which to set FLAG_OVERHEATING
-  temp_overheat: 85.0
+  temp_overheat_c: 85.0
 
   # Memory usage percentage at which to set FLAG_LOW_MEMORY
-  memory_low: 90
+  memory_low_pct: 90
 
   # Disk usage percentage at which to set FLAG_LOW_DISK
-  disk_low: 95
+  disk_low_pct: 95
 
 # Platform backend selection
 # Leave commented for auto-detection, or set to one of:

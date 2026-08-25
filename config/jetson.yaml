@@ -17,7 +17,7 @@ services: []
 platform: "jetson"
 
 thresholds:
-  temp_throttle: 75.0
-  temp_overheat: 85.0
-  memory_low: 85
-  disk_low: 90
+  temp_throttle_c: 75.0
+  temp_overheat_c: 85.0
+  memory_low_pct: 85
+  disk_low_pct: 90
