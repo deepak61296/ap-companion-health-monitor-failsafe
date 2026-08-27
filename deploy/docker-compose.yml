@@ -27,7 +27,8 @@ services:
       - MAVLINK20=1
       - PYTHONUNBUFFERED=1
 
-    # Default command (monitors /dev/ttyACM0 directly)
+    # Change the device for your setup; /dev/serial/by-id/ paths are stable
+    # across reboots, numbered names like /dev/ttyACM0 are not
     command: ["--device", "/dev/ttyACM0", "--verbose"]
 
     # Health check

@@ -7,7 +7,7 @@ Type=simple
 # User will be dynamically replaced during install.sh
 User=COMPANION_USER
 Environment="PATH=/home/COMPANION_USER/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/usr/bin/env python3 -u -m companion_health --device /dev/ttyACM0
+ExecStart=/usr/bin/env python3 -u -m companion_health --device COMPANION_DEVICE
 Restart=always
 RestartSec=5
 

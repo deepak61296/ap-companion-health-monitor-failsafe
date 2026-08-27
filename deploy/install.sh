@@ -1,7 +1,13 @@
 #!/bin/bash
 # Install companion health monitor as a systemd service
+#
+# Usage: sudo ./install.sh [device]
+#   device defaults to /dev/ttyACM0. Prefer the stable /dev/serial/by-id/
+#   path so USB enumeration order cannot swap devices between boots.
 
 set -e
+
+DEVICE="${1:-/dev/ttyACM0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -24,7 +30,7 @@ sudo -u "$ACTUAL_USER" python3 -m pip install -e "$PROJECT_ROOT" --user
 # Create dynamic service file
 SERVICE_FILE="/etc/systemd/system/companion-health.service"
 echo "Creating systemd service at $SERVICE_FILE..."
-sed "s/COMPANION_USER/$ACTUAL_USER/g" "$SCRIPT_DIR/companion-health.service" > "$SERVICE_FILE"
+sed -e "s/COMPANION_USER/$ACTUAL_USER/g" -e "s|COMPANION_DEVICE|$DEVICE|g" "$SCRIPT_DIR/companion-health.service" > "$SERVICE_FILE"
 
 # Reload systemd
 systemctl daemon-reload
@@ -33,6 +39,6 @@ systemctl daemon-reload
 systemctl enable companion-health.service
 systemctl restart companion-health.service
 
-echo "Service installed and started successfully!"
+echo "Service installed and started (device: $DEVICE)"
 echo "Check status with: systemctl status companion-health"
 echo "View logs with: journalctl -u companion-health -f"

@@ -1,9 +1,12 @@
 # Raspberry Pi Configuration
-# For RPi 3/4/5 with serial connection to FC
+# For RPi 3/4/5 connected to the FC over USB.
+# Prefer the /dev/serial/by-id/ path for your board: numbered names like
+# /dev/ttyACM0 depend on USB enumeration order.
+# GPIO UART (/dev/ttyAMA0 at 921600) is not yet tested on hardware.
 
 connection:
-  device: "/dev/ttyAMA0"
-  baud: 921600
+  device: "/dev/ttyACM0"
+  baud: 115200
   source_system: 1
   source_component: 191
 
@@ -11,7 +14,7 @@ monitoring:
   rate_hz: 1.0
   disk_path: "/"
 
-# Services to monitor (GSoC Week 1-2)
+# Processes to monitor; list order defines the CCH_SVC_MASK bit positions
 services: []
 
 platform: "raspberry_pi"
