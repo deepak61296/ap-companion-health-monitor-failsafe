@@ -30,7 +30,7 @@ DEFAULTS: Dict[str, Any] = {
         'memory_low_pct': 90,
         'disk_low_pct': 95,
     },
-    'services': [],  # GSoC: list of service names to monitor
+    'services': [],  # process names to monitor, in CCH_SVC_MASK bit order
     'platform': None,
 }
 

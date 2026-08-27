@@ -1,33 +1,114 @@
 # Companion Computer Health Monitor
 
-Monitors the health of companion computers (Raspberry Pi, Jetson, generic Linux) and reports metrics to ArduPilot over MAVLink. The flight controller uses these reports to trigger failsafe actions (RTL, Land, SmartRTL) if the companion stops responding, freezes, or enters a critical state.
+Companion computers do flight-critical work on a lot of ArduPilot vehicles: precision landing, obstacle avoidance, visual navigation. When that computer crashes, hangs or overheats mid-flight, ArduPilot currently has no idea. This project closes that gap.
 
-This started as a prototype for a GSoC 2026 proposal and is now being completed independently as a contribution to the ArduPilot community. The flight-controller side lives in the [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-computer-health-monitor) (`AP_CompanionHealth` library); this repo is the reference companion-side implementation - any MAVLink-capable software can replace it.
+A small daemon on the companion sends a 1 Hz health message to the flight controller. On the FC side, the `AP_CompanionHealth` library tracks it and runs a real failsafe when the companion goes silent, freezes or reports a critical condition. This repo is the companion half, written as a reference implementation. Any MAVLink-capable software can send the same message and get the same failsafe.
+
+The flight controller side lives in the [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-health), branch `companion-health`.
 
 ## Demo
 
-**[Watch Demo Video](https://www.youtube.com/watch?v=s6RZwZTwf14)** - ArduCopter failsafe triggering when the companion health script stops sending messages.
+[Watch the demo video](https://www.youtube.com/watch?v=s6RZwZTwf14). ArduCopter triggers its failsafe when the companion stops sending health messages.
 
-## How it works
+## Architecture
 
-The companion sends a 13-byte `COMPANION_HEALTH` message at 1 Hz. The FC tracks a state machine (`DISCONNECTED` / `HEALTHY` / `DEGRADED` / `CRITICAL`) and triggers a configurable failsafe on:
+```
+companion computer                        flight controller (ArduCopter)
+------------------                       ------------------------------
+psutil / vcgencmd / sysfs
+      |
+platform backend
+(metrics + spike filtering)
+      |
+state machine
+HEALTHY / DEGRADED / CRITICAL
+      |
+COMPANION_HEALTH sender, 1 Hz  ------->  AP_CompanionHealth library
+(serial, UDP, TCP,                       DISCONNECTED / HEALTHY /
+ or via mavlink-router)                  DEGRADED / CRITICAL
+                                               |
+                                         failsafe action (same path as the
+                                         GCS failsafe), pre-arm check,
+                                         status text on state change,
+                                         CCH dataflash logging
+```
 
-- **Timeout** - no message for `CCH_TIMEOUT` seconds
-- **Watchdog stall** - messages still arriving but `watchdog_seq` frozen (companion stuck in a loop)
-- **Service loss** - a process required by the `CCH_SVC_MASK` bitmask stopped running
-- **Critical metrics** - overheating flag, or CPU/memory/temperature past critical thresholds
+Four things trigger the failsafe:
 
-`DEGRADED` (warning thresholds) only logs and warns; it never triggers a failsafe. An optional pre-arm check blocks arming while the companion is unhealthy.
+1. Timeout. No message for `CCH_TIMEOUT` seconds.
+2. Watchdog stall. Messages keep arriving but `watchdog_seq` stops incrementing. This catches a companion transmitting from a hung loop, which a plain timeout would miss.
+3. Required service loss. `CCH_SVC_MASK` marks services that must be running on the companion.
+4. Critical state. Overheating flag set, or load and temperature past the critical thresholds.
 
-## Features
+DEGRADED is a warning only and never triggers a failsafe. Dropouts shorter than the timeout are invisible by design, so restarting the companion service does not shake the vehicle.
 
-- Platform backends with auto-detection: generic Linux (psutil), Raspberry Pi (`vcgencmd` temperature and throttle detection), Jetson (sysfs GPU load and thermal zones)
-- Service monitoring via psutil with `pgrep` fallback, packed into the `services_status` bitmask
-- Spike filtering (moving average) on CPU and temperature to avoid false failsafes
-- Auto-reconnect with exponential backoff
-- Works with stock pymavlink (raw-packet fallback, no rebuilt dialect needed on the companion)
-- YAML config with CLI overrides, systemd service + installer, Dockerfile/compose, mavlink-router configs
-- FC side: `CCH` DataFlash logging at 1 Hz, GCS status text, pre-arm check, 8-subtest SITL autotest (`CompanionHealthFailsafe`)
+Thresholds exist on both sides. The companion sets `status_flags` from its own config (overheat, low memory, low disk, throttling). The flight controller classifies the raw fields independently: DEGRADED past 80 percent load or 75 C, CRITICAL past 95 percent or 90 C.
+
+Three platform backends are auto-detected at startup: Raspberry Pi (`vcgencmd` for temperature and throttle state), Jetson (sysfs thermal zones and GPU load) and generic Linux (psutil), which is also what runs inside Docker. CPU and temperature pass through a short moving average so a single spiky sample cannot trip anything. The MAVLink layer encodes the message as a raw packet, so the companion runs on stock pymavlink with no rebuilt dialect.
+
+## The message
+
+`COMPANION_HEALTH`, id 11061, 13 byte payload, sent at 1 Hz:
+
+| Field | Type | Meaning |
+| :--- | :--- | :--- |
+| `services_status` | uint32 | bitmask of running services |
+| `watchdog_seq` | uint16 | increments every message, detects stalls |
+| `temperature` | int16 | centidegrees Celsius (4500 = 45.0 C), INT16_MAX if no sensor |
+| `cpu_load` | uint8 | 0-100 percent |
+| `memory_used` | uint8 | 0-100 percent |
+| `disk_used` | uint8 | 0-100 percent |
+| `gpu_load` | uint8 | 0-100 percent, 255 if not available |
+| `status_flags` | uint8 | bit 0 throttled, bit 1 overheating, bit 2 low memory, bit 3 low disk |
+
+## FC parameters
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `CCH_ENABLE` | int8 | 0 | Failsafe action, same value set as `FS_GCS_ENABLE`: 0 Disabled, 1 RTL, 3 SmartRTL or RTL, 4 SmartRTL or Land, 5 Land, 6 Auto DO_LAND_START or RTL, 7 Brake or Land. Value 2 is a legacy GCS option and behaves as RTL |
+| `CCH_TIMEOUT` | float | 5.0 | Seconds without a message before the failsafe fires |
+| `CCH_SVC_MASK` | int32 | 0 | Bitmask of required services. Bit N maps to entry N of the `services` list in the companion config. 0 disables the check |
+
+## Quick start
+
+```bash
+git clone https://github.com/deepak61296/ap-companion-health-monitor-failsafe.git
+cd ap-companion-health-monitor-failsafe
+pip install -e .
+
+# SITL, direct connection
+python -m companion_health --device udpout:127.0.0.1:14560 -v
+
+# SITL through mavlink-router
+./scripts/run_sitl_router.sh &
+python -m companion_health --device udpout:127.0.0.1:14551 -v
+
+# Hardware over USB
+python -m companion_health --device /dev/ttyACM0 -v
+
+# With a config file
+python -m companion_health --config config/raspberry_pi.yaml -v
+```
+
+The flight controller must run the `companion-health` branch of the ArduPilot fork linked above. The message and the failsafe are not in upstream ArduPilot yet.
+
+## Install as a service
+
+```bash
+sudo ./deploy/install.sh
+```
+
+That installs the package, writes a systemd unit and starts it against `/dev/ttyACM0`. To use a different device, pass it as an argument:
+
+```bash
+sudo ./deploy/install.sh /dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_XXXX-if00
+```
+
+Prefer the `/dev/serial/by-id/` path over `/dev/ttyACM0`. Numbered device names depend on USB enumeration order, and another device plugged in at boot can steal the number. The same advice applies to `deploy/docker-compose.yml` and the mavlink-router configs, which default to `/dev/ttyACM0` and need editing for your setup. Re-running `install.sh` rewrites the unit file, so pass the device argument every time.
+
+## Configuration
+
+YAML config with CLI overrides. Example configs for SITL, Raspberry Pi and Jetson are in `config/`. The `services` list names the processes to monitor; its order defines the `CCH_SVC_MASK` bit positions, so keep the list stable once you set the mask on the FC.
 
 ## Verification status
 
@@ -41,133 +122,60 @@ Honest state of testing evidence, not aspirations:
 | 1-hour stress soak on RPi 4 | Passed August 2026: memory flat, zero restarts, no spurious failsafes under staged CPU and memory load |
 | mavlink-router multi-app | Verified on real hardware August 2026: companion, a network GCS and a TCP client sharing one flight controller link |
 | Dataflash `CCH` logging | Verified in a real `.BIN` pulled off a CubeOrange, August 2026 |
-| CubeOrange + Raspberry Pi 4 (UART) | **Not yet tested** - planned. The message layer is transport-agnostic, but the GPIO serial path has not been exercised |
-| CubeOrange + Jetson | **On hold.** The backend and its unit tests exist, but the last on-device run predates the current code. Reverification will come later |
+| CubeOrange + Raspberry Pi 4 (UART) | Not yet tested, planned. The message layer is transport-agnostic, but the GPIO serial path has not been exercised |
+| CubeOrange + Jetson | On hold. The backend and its unit tests exist, but the last on-device run predates the current code. Reverification will come later |
 | Docker deployment | Optional path, SITL only, not yet on hardware |
 
-## Platform support
-
-Three backends, auto-detected at startup:
-
-| Backend | Status |
-| :--- | :--- |
-| Raspberry Pi (`vcgencmd` temperature and throttle detection) | Primary, verified on hardware |
-| Generic Linux (`psutil`, sysfs thermal zones) | Primary, the portable fallback for any Linux companion |
-| Jetson (sysfs GPU load and thermal zones) | On hold - code and unit tests exist, on-device reverification pending |
-
-Docker is a deployment option rather than a backend; inside a container the generic Linux
-backend is what runs.
-
-## Project Structure
+## Project structure
 
 ```
 companion-health-monitor/
   src/companion_health/
-    monitor.py           # Main telemetry loop (1 Hz COMPANION_HEALTH sender)
-    state.py             # State machine (DISCONNECTED/HEALTHY/DEGRADED/CRITICAL)
-    mavlink.py           # Raw MAVLink packet encoding for COMPANION_HEALTH
-    config.py            # YAML configuration loader
-    cli.py               # Command-line argument parsing
-    backends/
-      base.py            # Abstract MetricsBackend + spike filtering
-      generic.py         # Generic Linux backend (psutil)
-      raspberry_pi.py    # RPi backend (vcgencmd for throttle/temp)
-      jetson.py          # Jetson backend (sysfs GPU load, thermal zones)
-    services/
-      monitor.py         # ServicesMonitor (psutil/pgrep process detection)
-  config/                # Example configs (sitl, raspberry_pi, jetson)
-  deploy/
-    mavlink-router/      # mavlink-router configs
-    companion-health.service  # systemd unit
-    install.sh           # Installer (pip install + service setup)
-    Dockerfile, docker-compose.yml
-  scripts/               # SITL helpers, pymavlink wheel builder
-  tests/
-    unit/                # Backends, config, state, services
-    integration/         # SITL and hardware tests
+    monitor.py           # main 1 Hz telemetry loop
+    state.py             # state machine
+    mavlink.py           # raw COMPANION_HEALTH packet encoding
+    config.py            # YAML config loader
+    cli.py               # command line parsing
+    backends/            # base + generic, raspberry_pi, jetson
+    services/            # process monitoring for services_status
+  config/                # example configs (sitl, raspberry_pi, jetson)
+  deploy/                # systemd unit, install.sh, Docker, mavlink-router configs
+  scripts/               # SITL helpers
+  tests/                 # unit + integration
 ```
 
-FC-side files (branch `companion-computer-health-monitor` of the ArduPilot fork):
+FC side, on branch `companion-health` of the ArduPilot fork:
 
 ```
-libraries/AP_CompanionHealth/   # Library: message handling, state machine, params, logging
-ArduCopter/events.cpp           # failsafe_companion_check/on_event/off_event (3Hz)
-libraries/AP_Arming/            # Pre-arm health check
+libraries/AP_CompanionHealth/   # message handling, state machine, params, logging
+ArduCopter/events.cpp           # failsafe on/off events, 3 Hz check
+libraries/AP_Arming/            # pre-arm health check
 Tools/autotest/arducopter.py    # CompanionHealthFailsafe autotest
-modules/mavlink                 # Submodule pinned to the companion-health branch of
-                                # deepak61296/mavlink (COMPANION_HEALTH message definition)
+modules/mavlink                 # submodule with the COMPANION_HEALTH definition
 ```
-
-## FC Parameters
-
-| Parameter | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `CCH_ENABLE` | int8 | 0 | Failsafe action: 0=Disabled, 1=RTL, 2=Continue Mission in Auto, 3=SmartRTL or RTL, 4=SmartRTL or Land, 5=Land, 6=Auto DO_LAND_START or RTL, 7=Brake or Land (same values as GCS failsafe) |
-| `CCH_TIMEOUT` | float | 5.0 | Seconds without messages before failsafe triggers |
-| `CCH_SVC_MASK` | int32 | 0 | Bitmask of required services (bit N = service N from the config list must be running; 0 = ignore) |
-
-## MAVLink Message Format
-
-`COMPANION_HEALTH` (ID 11061, 13 bytes):
-- `services_status` (uint32) - bitmask of running services
-- `watchdog_seq` (uint16) - incrementing counter to detect stalls
-- `temperature` (int16) - centidegrees Celsius (4500 = 45.0C), INT16_MAX if no sensor
-- `cpu_load` (uint8) - 0-100%
-- `memory_used` (uint8) - 0-100%
-- `disk_used` (uint8) - 0-100%
-- `gpu_load` (uint8) - 0-100% or 255 if not available
-- `status_flags` (uint8) - bit 0: throttled, bit 1: overheating, bit 2: low memory, bit 3: low disk
-
-## Quick Start
-
-```bash
-# Clone and install
-git clone https://github.com/deepak61296/ap-companion-health-monitor-failsafe.git
-cd ap-companion-health-monitor-failsafe
-pip install -e .
-
-# SITL testing (direct connection)
-python -m companion_health --device udpout:127.0.0.1:14560 -v
-
-# SITL testing (through mavlink-router)
-./scripts/run_sitl_router.sh &
-python -m companion_health --device udpout:127.0.0.1:14551 -v
-
-# Hardware (USB)
-python -m companion_health --device /dev/ttyACM0 -v
-
-# With config file
-python -m companion_health --config config/raspberry_pi.yaml -v
-```
-
-The flight controller must run the `companion-computer-health-monitor` branch of the ArduPilot fork linked below (the custom message and failsafe are not in upstream ArduPilot yet).
 
 ## Development
 
 ```bash
-# Install with dev dependencies
 pip install -e ".[dev]"
-
-# Run unit tests
 pytest tests/unit/ -v
-
-# Run linter
-flake8 src/
+flake8 src tests
 ```
 
 ## Roadmap
 
 1. Upstream the `COMPANION_HEALTH` message to ArduPilot/mavlink
 2. Submit the `AP_CompanionHealth` + Copter failsafe PR to ArduPilot
-3. UART (GPIO serial) between companion and flight controller - USB is verified, UART is not
+3. UART (GPIO serial) between companion and flight controller
 4. Jetson reverification on current code
-5. ArduPilot wiki documentation; ArduPlane and ArduRover ports as follow-ups
+5. ArduPilot wiki documentation; Plane and Rover ports as follow-ups
+6. Local read-only status endpoint (JSON) on the companion, for bench debugging and fleet tooling
 
 ## Related
 
-- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-health) - Flight controller library and autotest
-- [MAVLink fork](https://github.com/deepak61296/mavlink/tree/companion-health-master) - COMPANION_HEALTH message definition
-- [Video Demo](https://www.youtube.com/watch?v=s6RZwZTwf14)
+- [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-health), flight controller library and autotest
+- [MAVLink fork](https://github.com/deepak61296/mavlink/tree/companion-health-master), COMPANION_HEALTH message definition
+- [Demo video](https://www.youtube.com/watch?v=s6RZwZTwf14)
 
 ## License
 
