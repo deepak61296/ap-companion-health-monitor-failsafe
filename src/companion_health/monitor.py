@@ -220,8 +220,12 @@ class HealthMonitor:
             Exit code (0 for success, non-zero for error)
         """
         self.running = True
-        interval_s = 1.0 / self.config.monitoring.rate_hz
-        log.info("Starting health monitor main loop (rate: %.1f Hz)", self.config.monitoring.rate_hz)
+        rate_hz = self.config.monitoring.rate_hz
+        if rate_hz <= 0:
+            log.warning("Invalid monitoring rate %.1f Hz, using 1.0 Hz", rate_hz)
+            rate_hz = 1.0
+        interval_s = 1.0 / rate_hz
+        log.info("Starting health monitor main loop (rate: %.1f Hz)", rate_hz)
 
         backoff_s = 1.0
         max_backoff_s = 30.0
