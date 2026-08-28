@@ -8,7 +8,7 @@ The flight controller side lives in the [ArduPilot fork](https://github.com/deep
 
 ## Demo
 
-[Watch the demo video](https://www.youtube.com/watch?v=s6RZwZTwf14). ArduCopter triggers its failsafe when the companion stops sending health messages.
+[Watch the demo video](https://www.youtube.com/watch?v=GweYXp5yXuU): SITL on a laptop, the monitor on a real Raspberry Pi 4 over WiFi. The Pi gets stressed to 90 percent CPU mid-mission (warning only, keeps flying), then the companion service is killed and the copter fails over to RTL on its own. Beat-by-beat screenshots in [docs/demo.md](docs/demo.md).
 
 ## Architecture
 
@@ -110,21 +110,15 @@ Prefer the `/dev/serial/by-id/` path over `/dev/ttyACM0`. Numbered device names 
 
 YAML config with CLI overrides. Example configs for SITL, Raspberry Pi and Jetson are in `config/`. The `services` list names the processes to monitor; its order defines the `CCH_SVC_MASK` bit positions, so keep the list stable once you set the mask on the FC.
 
+## Documentation
+
+- [docs/demo.md](docs/demo.md): what the demo shows, with screenshots, and how to reproduce it
+- [docs/mission-planner.md](docs/mission-planner.md): configuring the failsafe from Mission Planner and what a GCS shows
+- [docs/testing.md](docs/testing.md): full verification status and how to rerun every test
+
 ## Verification status
 
-Honest state of testing evidence, not aspirations:
-
-| Setup | Status |
-| :--- | :--- |
-| SITL (autotest, 11 subtests) | Passing on current ArduPilot master, August 2026, with `allow_skips=False` |
-| Unit suite | 66 passed / 2 skipped; CI on Python 3.10-3.12, also verified on 3.13 |
-| CubeOrange + Raspberry Pi 4 (USB) | End-to-end verified August 2026: pre-arm gate, failsafe at exactly `CCH_TIMEOUT`, recovery, all as a real systemd service |
-| 1-hour stress soak on RPi 4 | Passed August 2026: memory flat, zero restarts, no spurious failsafes under staged CPU and memory load |
-| mavlink-router multi-app | Verified on real hardware August 2026: companion, a network GCS and a TCP client sharing one flight controller link |
-| Dataflash `CCH` logging | Verified in a real `.BIN` pulled off a CubeOrange, August 2026 |
-| CubeOrange + Raspberry Pi 4 (UART) | Not yet tested, planned. The message layer is transport-agnostic, but the GPIO serial path has not been exercised |
-| CubeOrange + Jetson | On hold. The backend and its unit tests exist, but the last on-device run predates the current code. Reverification will come later |
-| Docker deployment | Optional path, SITL only, not yet on hardware |
+Tested on real hardware, not just SITL: the autotest suite (11 subtests) passes on current ArduPilot master, the unit suite runs in CI, and the failsafe chain is verified end to end on a CubeOrange with a Raspberry Pi 4 as a systemd service, including a 1-hour stress soak and dataflash logging. UART transport and Jetson reverification are still open. The honest table with dates lives in [docs/testing.md](docs/testing.md).
 
 ## Project structure
 
@@ -175,7 +169,7 @@ flake8 src tests
 
 - [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-health), flight controller library and autotest
 - [MAVLink fork](https://github.com/deepak61296/mavlink/tree/companion-health-master), COMPANION_HEALTH message definition
-- [Demo video](https://www.youtube.com/watch?v=s6RZwZTwf14)
+- [Demo video](https://www.youtube.com/watch?v=GweYXp5yXuU)
 
 ## License
 
