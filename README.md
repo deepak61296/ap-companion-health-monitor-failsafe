@@ -65,7 +65,7 @@ Three platform backends are auto-detected at startup: Raspberry Pi (`vcgencmd` f
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `CCH_ENABLE` | int8 | 0 | Failsafe action, same value set as `FS_GCS_ENABLE`: 0 Disabled, 1 RTL, 3 SmartRTL or RTL, 4 SmartRTL or Land, 5 Land, 6 Auto DO_LAND_START or RTL, 7 Brake or Land. Value 2 is a legacy GCS option and behaves as RTL |
+| `CCH_ENABLE` | int8 | 0 | Failsafe action, same value set as `FS_GCS_ENABLE`: 0 Disabled, 1 RTL, 3 SmartRTL or RTL, 4 SmartRTL or Land, 5 Land, 6 Auto DO_LAND_START or RTL, 7 Brake or Land |
 | `CCH_TIMEOUT` | float | 5.0 | Seconds without a message before the failsafe fires |
 | `CCH_SVC_MASK` | int32 | 0 | Bitmask of required services. Bit N maps to entry N of the `services` list in the companion config. 0 disables the check |
 
