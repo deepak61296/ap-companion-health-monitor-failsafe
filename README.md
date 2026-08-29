@@ -67,7 +67,7 @@ Platform backends are auto-detected at startup. Raspberry Pi (`vcgencmd` for tem
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `CCH_ENABLE` | int8 | 0 | Failsafe action, same value set as `FS_GCS_ENABLE`: 0 Disabled, 1 RTL, 3 SmartRTL or RTL, 4 SmartRTL or Land, 5 Land, 6 Auto DO_LAND_START or RTL, 7 Brake or Land. -1 is Warn only, following the same convention as Q_LAND_ACTION |
+| `CCH_ENABLE` | int8 | 0 | Failsafe action, same value set as `FS_GCS_ENABLE`: 0 Disabled, 1 RTL, 3 SmartRTL or RTL, 4 SmartRTL or Land, 5 Land, 6 Auto DO_LAND_START or RTL, 7 Brake or Land. -1 is Warn only, following the same convention as Q_TRANS_FAIL_ACT |
 | `CCH_TIMEOUT` | float | 5.0 | Seconds without a message before the failsafe fires |
 | `CCH_SVC_MASK` | int32 | 0 | Bitmask of required services. Bit N maps to entry N of the `services` list in the companion config. 0 disables the check. Populate the `services` list first: a nonzero mask against an empty list reads as every required service missing and fails over immediately |
 
