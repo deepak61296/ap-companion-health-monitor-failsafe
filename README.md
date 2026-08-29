@@ -2,13 +2,13 @@
 
 Companion computers do flight-critical work on a lot of ArduPilot vehicles: precision landing, obstacle avoidance, visual navigation. When that computer crashes, hangs or overheats mid-flight, ArduPilot currently has no idea. This project closes that gap.
 
-A small daemon on the companion sends a 1 Hz health message to the flight controller. On the FC side, the `AP_CompanionHealth` library tracks it and runs a real failsafe when the companion goes silent, freezes or reports a critical condition. This repo is the companion half, written as a reference implementation. Any MAVLink-capable software can send the same message and get the same failsafe.
+A small daemon on the companion sends a 1 Hz health message to the flight controller. On the FC side, the `AP_CompanionHealth` library tracks it and runs a real failsafe when the companion goes silent or reports a critical condition. This repo is the companion half, written as a reference implementation. Any MAVLink-capable software can send the same message and get the same failsafe.
 
 The flight controller side lives in the [ArduPilot fork](https://github.com/deepak61296/ardupilot/tree/companion-health), branch `companion-health`.
 
 ## Demo
 
-[Watch the demo video](https://www.youtube.com/watch?v=GweYXp5yXuU): SITL on a laptop, the monitor on a real Raspberry Pi 4 over WiFi. The Pi gets stressed to 90 percent CPU mid-mission (warning only, keeps flying), then the companion service is killed and the copter fails over to RTL on its own. Beat-by-beat screenshots in [docs/demo.md](docs/demo.md).
+[Watch the demo video](https://www.youtube.com/watch?v=GweYXp5yXuU): SITL on a laptop, the monitor on a real Raspberry Pi 4 over WiFi. The Pi is stressed to 90 percent CPU before takeoff (warning only, still armable and still flies), then the companion service is killed in flight and the copter fails over to RTL on its own. Beat-by-beat screenshots in [docs/demo.md](docs/demo.md).
 
 ## Architecture
 
@@ -20,15 +20,15 @@ psutil / vcgencmd / sysfs
 platform backend
 (metrics + spike filtering)
       |
-state machine
-HEALTHY / DEGRADED / CRITICAL
+state machine (local logging
+only, not transmitted)
       |
 COMPANION_HEALTH sender, 1 Hz  ------->  AP_CompanionHealth library
 (serial, UDP, TCP,                       DISCONNECTED / HEALTHY /
  or via mavlink-router)                  DEGRADED / CRITICAL
                                                |
-                                         failsafe action (same path as the
-                                         GCS failsafe), pre-arm check,
+                                         failsafe action (GCS failsafe
+                                         pattern), pre-arm check,
                                          status text on state change,
                                          CCH dataflash logging
 ```
@@ -36,15 +36,17 @@ COMPANION_HEALTH sender, 1 Hz  ------->  AP_CompanionHealth library
 Four things trigger the failsafe:
 
 1. Timeout. No message for `CCH_TIMEOUT` seconds.
-2. Watchdog stall. Messages keep arriving but `watchdog_seq` stops incrementing. This catches a companion transmitting from a hung loop, which a plain timeout would miss.
-3. Required service loss. `CCH_SVC_MASK` marks services that must be running on the companion.
+2. Watchdog stall. Messages keep arriving but `watchdog_seq` stops incrementing. This catches any sender whose transmit path outlives its main loop. The reference monitor here increments the counter in the same loop that transmits, so for it a hang shows up as a plain timeout; the watchdog trigger exists for multi-threaded companion software.
+3. Required service loss. `CCH_SVC_MASK` marks processes that must be present on the companion. This detects a process that has exited or crashed. A process that is still running but internally hung keeps its bit set, so it is not detected.
 4. Critical state. Overheating flag set, or load and temperature past the critical thresholds.
 
 DEGRADED is a warning only and never triggers a failsafe. Dropouts shorter than the timeout are invisible by design, so restarting the companion service does not shake the vehicle.
 
+`CCH_ENABLE=-1` is Warn only, and it is the recommended way to start. The state machine, the status texts and the `CCH` dataflash records all run exactly as they do with a failsafe configured, but an unhealthy companion never takes the vehicle and never blocks arming. Fly it that way for a few flights, read the logs, then pick a real action once you trust what you are seeing. At `CCH_ENABLE=0` the FC still accepts the message and prints the connect text, but nothing else runs: no timeout detection, no status texts, no logging.
+
 Thresholds exist on both sides. The companion sets `status_flags` from its own config (overheat, low memory, low disk, throttling). The flight controller classifies the raw fields independently: DEGRADED past 80 percent load or 75 C, CRITICAL past 95 percent or 90 C.
 
-Three platform backends are auto-detected at startup: Raspberry Pi (`vcgencmd` for temperature and throttle state), Jetson (sysfs thermal zones and GPU load) and generic Linux (psutil), which is also what runs inside Docker. CPU and temperature pass through a short moving average so a single spiky sample cannot trip anything. The MAVLink layer encodes the message as a raw packet, so the companion runs on stock pymavlink with no rebuilt dialect.
+Platform backends are auto-detected at startup. Raspberry Pi (`vcgencmd` for temperature and throttle state) and generic Linux (psutil, also what runs inside Docker) are fully supported; generic works on any Linux companion, so nothing needs a dedicated backend to run. The Jetson backend (sysfs thermal zones and GPU load) exists but is not complete yet: no unit tests of its own, and its last on-device run predates the current code. CPU and temperature pass through a five sample moving average, so a single spiky reading is much less likely to trip a threshold. Memory and disk are reported unaveraged. The MAVLink layer encodes the message as a raw packet, so the companion runs on stock pymavlink with no rebuilt dialect.
 
 ## The message
 
@@ -65,9 +67,9 @@ Three platform backends are auto-detected at startup: Raspberry Pi (`vcgencmd` f
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `CCH_ENABLE` | int8 | 0 | Failsafe action, same value set as `FS_GCS_ENABLE`: 0 Disabled, 1 RTL, 3 SmartRTL or RTL, 4 SmartRTL or Land, 5 Land, 6 Auto DO_LAND_START or RTL, 7 Brake or Land |
+| `CCH_ENABLE` | int8 | 0 | Failsafe action, same value set as `FS_GCS_ENABLE`: 0 Disabled, 1 RTL, 3 SmartRTL or RTL, 4 SmartRTL or Land, 5 Land, 6 Auto DO_LAND_START or RTL, 7 Brake or Land. -1 is Warn only, following the same convention as Q_LAND_ACTION |
 | `CCH_TIMEOUT` | float | 5.0 | Seconds without a message before the failsafe fires |
-| `CCH_SVC_MASK` | int32 | 0 | Bitmask of required services. Bit N maps to entry N of the `services` list in the companion config. 0 disables the check |
+| `CCH_SVC_MASK` | int32 | 0 | Bitmask of required services. Bit N maps to entry N of the `services` list in the companion config. 0 disables the check. Populate the `services` list first: a nonzero mask against an empty list reads as every required service missing and fails over immediately |
 
 ## Quick start
 
@@ -116,9 +118,13 @@ YAML config with CLI overrides. Example configs for SITL, Raspberry Pi and Jetso
 - [docs/mission-planner.md](docs/mission-planner.md): configuring the failsafe from Mission Planner and what a GCS shows
 - [docs/testing.md](docs/testing.md): full verification status and how to rerun every test
 
+## Future work
+
+Liveness checking. The current service check confirms that a named process exists, which does not detect a process that is running but internally stalled. The planned approach is an optional heartbeat file per service, written by the monitored program after each work iteration, with the monitor clearing the bit when the file goes stale. This follows the principle the flight controller already applies to the companion link: a periodic signal from the party whose health is in question is what proves health, not its presence in a process table. It needs no flight controller or MAVLink change.
+
 ## Verification status
 
-Tested on real hardware, not just SITL: the autotest suite (11 subtests) passes on current ArduPilot master, the unit suite runs in CI, and the failsafe chain is verified end to end on a CubeOrange with a Raspberry Pi 4 as a systemd service, including a 1-hour stress soak and dataflash logging. UART transport and Jetson reverification are still open. The honest table with dates lives in [docs/testing.md](docs/testing.md).
+Tested on real hardware, not just SITL: the autotest suite (12 subtests) passes on ArduPilot master as of 14 August 2026, the unit suite runs in CI, and the failsafe chain is verified end to end on a CubeOrange with a Raspberry Pi 4 as a systemd service, including a 1-hour stress soak and dataflash logging. UART transport and Jetson reverification are still open. The honest table with dates lives in [docs/testing.md](docs/testing.md).
 
 ## Project structure
 

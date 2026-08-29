@@ -7,22 +7,24 @@ piece yourself.
 
 | Setup | Status |
 | :--- | :--- |
-| SITL (autotest, 11 subtests) | Passing on current ArduPilot master, August 2026, with `allow_skips=False` |
+| SITL (autotest, 12 subtests) | Passing on ArduPilot master as of 14 August 2026, with `allow_skips=False` |
+| Warn only (`CCH_ENABLE=-1`) | Verified in SITL August 2026: autotest subtest 12 plus a dedicated probe, 497 `CCH` records logged with no failsafe armed, arming allowed with the companion absent |
 | Unit suite | 66 passed / 2 skipped; CI on Python 3.10-3.12, also verified on 3.13 |
 | SITL flight + real RPi 4 over WiFi | Full demo arc verified August 2026: healthy, degraded under real load with no failsafe, timeout failsafe to RTL mid flight, pre-arm gate, recovery |
-| CubeOrange + Raspberry Pi 4 (USB) | End-to-end verified August 2026: pre-arm gate, failsafe at exactly `CCH_TIMEOUT`, recovery, all as a real systemd service |
+| CubeOrange + Raspberry Pi 4 (USB) | End-to-end verified August 2026: pre-arm gate, failsafe within one 3 Hz cycle of `CCH_TIMEOUT`, recovery, all as a real systemd service |
 | 1-hour stress soak on RPi 4 | Passed August 2026: memory flat, zero restarts, no spurious failsafes under staged CPU and memory load |
 | mavlink-router multi-app | Verified on real hardware August 2026: companion, a network GCS and a TCP client sharing one flight controller link |
 | Dataflash `CCH` logging | Verified in a real `.BIN` pulled off a CubeOrange, August 2026 |
 | CubeOrange + Raspberry Pi 4 (UART) | Not yet tested, planned. The message layer is transport-agnostic, but the GPIO serial path has not been exercised |
-| CubeOrange + Jetson | On hold. The backend and its unit tests exist, but the last on-device run predates the current code. Reverification will come later |
+| CubeOrange + Jetson | On hold. The backend exists and degrades gracefully when its sysfs paths are missing, but it has no unit tests of its own and the last on-device run predates the current code |
 | Docker deployment | Optional path, SITL only, not yet on hardware |
 
 ## Reproducing the SITL autotest
 
 The FC-side behavior is covered by `CompanionHealthFailsafe` in the ArduPilot
-autotest suite, 11 subtests: message handling, all four failsafe triggers,
-the pre-arm gate, recovery, a reconnect storm and timeout edge cases.
+autotest suite, 12 subtests: the disabled action, all four failsafe
+triggers, DEGRADED taking no action, the pre-arm gate, recovery, a failsafe
+out of GUIDED, a reconnect storm, timeout edge values, and warn only (`CCH_ENABLE=-1`).
 
 ```bash
 cd ardupilot
@@ -49,8 +51,10 @@ The five minute version, two machines or one:
    (use `udpout:127.0.0.1:14560` for a same-machine UDP link instead).
 4. Watch for `Companion [HEALTHY]` in the console.
 5. Stop the monitor. Five seconds later the console prints
-   `Companion Failsafe`, and an armed copter switches to your configured
-   action. Arming is now blocked.
+   `Companion Failsafe`. A copter flying at altitude switches to your
+   configured action; a copter sitting on the ground is disarmed instead,
+   because `should_disarm_on_failsafe()` takes priority once landed. Arming
+   is now blocked.
 6. Start the monitor again. `Companion Failsafe Cleared`, arming works.
 
 A full walkthrough with a flight in the loop is in [demo.md](demo.md).

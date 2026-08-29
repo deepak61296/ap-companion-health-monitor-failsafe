@@ -47,5 +47,16 @@ thresholds:
 # Leave commented for auto-detection, or set to one of:
 #   - "generic"       : Generic Linux (psutil + nvidia-smi)
 #   - "raspberry_pi"  : Raspberry Pi optimized (vcgencmd)
-#   - "jetson"        : NVIDIA Jetson (tegrastats)
+#   - "jetson"        : NVIDIA Jetson (sysfs thermal zones and GPU load; not complete yet)
 # platform: "generic"
+
+# Processes to monitor for the services_status bitmask. List order defines the
+# CCH_SVC_MASK bit positions: first entry = bit 0, second = bit 1, and so on.
+# Names match by process name or as a substring of the command line, so pick
+# distinctive names. Populate this list BEFORE setting CCH_SVC_MASK on the
+# flight controller: a nonzero mask with an empty list reads as every required
+# service missing and triggers the failsafe immediately.
+# services:
+#   - mavlink-routerd
+#   - vision_node.py
+services: []

@@ -64,5 +64,6 @@ sudo systemctl stop companion-health
 sudo systemctl start companion-health
 ```
 
-Set `CCH_ENABLE` to 1 and `CCH_TIMEOUT` to 5 on the FC first. See
+Set `CCH_ENABLE` to 1 and `CCH_TIMEOUT` to 5 on the FC first (or `CCH_ENABLE`
+to -1, Warn only, to watch without giving the failsafe any authority). See
 [mission-planner.md](mission-planner.md) for doing that from a GCS.
