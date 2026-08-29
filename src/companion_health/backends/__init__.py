@@ -34,7 +34,7 @@ def detect_backend(config: Optional[Dict[str, Any]] = None) -> MetricsBackend:
     Returns:
         Appropriate MetricsBackend instance for this platform
     """
-    # Check for Jetson (has tegrastats and specific GPU path)
+    # Check for Jetson (nv_tegra_release marker or the Tegra GPU sysfs node)
     if os.path.exists('/etc/nv_tegra_release') or os.path.exists('/sys/devices/gpu.0'):
         try:
             from .jetson import JetsonBackend

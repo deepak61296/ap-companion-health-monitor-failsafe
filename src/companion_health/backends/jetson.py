@@ -1,12 +1,15 @@
 """
-NVIDIA Jetson backend with tegrastats integration.
+NVIDIA Jetson backend reading GPU load and thermal zones from sysfs.
+
+Not complete: it has no unit tests of its own and the last on-device run
+predates the current code. Raspberry Pi and generic Linux are the fully
+supported backends; this one is kept working on a best-effort basis.
 """
 
 import logging
 import os
 
-import subprocess
-from typing import Dict, Optional
+from typing import Optional
 
 import psutil
 
@@ -159,54 +162,3 @@ class JetsonBackend(MetricsBackend):
                 pass
 
         return 255  # Not available
-
-    def get_power_mode(self) -> Optional[str]:
-        """Get current NVP model power mode."""
-        try:
-            result = subprocess.run(
-                ['nvpmodel', '-q'],
-                capture_output=True, text=True, timeout=2
-            )
-            if result.returncode == 0:
-                # Parse output for mode name
-                for line in result.stdout.split('\n'):
-                    if 'NV Power Mode' in line:
-                        return line.split(':')[-1].strip()
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-        return None
-
-    def get_jetson_stats(self) -> Dict[str, int]:
-        """Get additional Jetson-specific stats.
-
-        Returns dict with available stats like:
-        - gpu_freq: GPU frequency in MHz
-        - emc_freq: Memory controller frequency
-        - power: Power consumption in mW
-        """
-        stats = {}
-
-        # GPU frequency
-        gpu_freq_path = '/sys/devices/gpu.0/devfreq/57000000.gpu/cur_freq'
-        if os.path.exists(gpu_freq_path):
-            try:
-                with open(gpu_freq_path, 'r') as f:
-                    stats['gpu_freq'] = int(f.read().strip()) // 1000000  # Hz to MHz
-            except (IOError, ValueError):
-                pass
-
-        # Try to get power from INA sensors (varies by model)
-        power_paths = [
-            '/sys/bus/i2c/drivers/ina3221x/6-0040/iio:device0/in_power0_input',
-            '/sys/bus/i2c/drivers/ina3221x/0-0040/iio:device0/in_power0_input',
-        ]
-        for path in power_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, 'r') as f:
-                        stats['power'] = int(f.read().strip())  # mW
-                        break
-                except (IOError, ValueError):
-                    continue
-
-        return stats
